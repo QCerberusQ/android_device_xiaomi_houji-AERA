@@ -1,1 +1,1 @@
-# android_device_xiaomi_houji-AERA
+AERA Recovery Project device tree for Xiaomi 14
