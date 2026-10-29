@@ -25,6 +25,8 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
+import /init.recovery.wifi.rc
+
 on early-init
     wait /sys/fs/selinux/enforce
     write /sys/fs/selinux/enforce 0
@@ -32,6 +34,7 @@ on early-init
 on init
     start vendor.boot-qti
     setprop prepdecrypt.setpatch true
+    setprop crypto.ready 0
 
 on early-fs
     write /proc/sys/walt/sched_lib_name "recovery,magiskboot,Updater,updater,update_engine_sideload"
@@ -50,6 +53,9 @@ on fs
     mkdir /mnt/vendor/persist 0775 shell system
     mkdir /tmp/persist 0775 shell system
     mount none /tmp/persist /mnt/vendor/persist bind rec
+    # Read factory WLAN calibration through its own mount after bootdevice exists.
+    mkdir /mnt/aera-wlan-persist 0755 root root
+    mount ext4 /dev/block/bootdevice/by-name/persist /mnt/aera-wlan-persist ro nosuid nodev noatime noload
     install_keyring
 
 on boot
@@ -59,6 +65,10 @@ on property:twrp.modules.loaded=true
     # Mount firmware
     mkdir /firmware
     mount vfat /dev/block/bootdevice/by-name/modem${ro.boot.slot_suffix} /firmware ro
+    # Keep only this slot's Kiwi firmware visible after the existing modem unmount.
+    mkdir /vendor/firmware_mnt/image/kiwi 0755 root root
+    mount none /firmware/image/kiwi /vendor/firmware_mnt/image/kiwi bind
+    mount none /firmware/image/kiwi /vendor/firmware_mnt/image/kiwi remount bind ro
     # Load ADSP firmware for PMIC
     wait /sys/kernel/boot_adsp/boot
     write /sys/kernel/boot_adsp/boot 1
@@ -76,18 +86,33 @@ on property:twrp.modules.loaded=true
     start vendor.health-default
     umount /firmware
 
-on property:ro.crypto.state=encrypted && property:ro.boot.dynamic_partitions=true
+on property:ro.crypto.state=encrypted && property:ro.boot.dynamic_partitions=true && property:twrp.super.symlinks_created=true && property:twrp.modules.loaded=true
     start prepdecrypt.vendor
+
+on property:servicemanager.ready=true
+    chmod 0755 /vendor/bin/hw/vendor.qti.hardware.display.allocator-service
+    start vendor.qti.hardware.display.allocator
+    setprop sys.boot_completed 1
 
 on property:hwservicemanager.ready=true
     setprop sys.boot_completed 1
 
 on property:vendor.sys.listeners.registered=true
     start vendor.ssgtzd
+
+on property:vendor.sys.listeners.registered=true && property:servicemanager.ready=true
     start vendor.secure_element
+
+on property:crypto.ready=1 && property:vendor.sys.listeners.registered=true && property:servicemanager.ready=true
     start vendor.weaver_nxp
     start vendor.gatekeeper_default
-
-on property:crypto.ready=1
     start vendor.keymint-qti
     start vendor.keymint-strongbox
+
+service vendor.qti.hardware.display.allocator /vendor/bin/hw/vendor.qti.hardware.display.allocator-service
+    disabled
+    oneshot
+    user root
+    group root graphics drmrpc
+    capabilities SYS_NICE
+    seclabel u:r:recovery:s0
