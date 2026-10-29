@@ -194,5 +194,13 @@ AERA_INCLUDE_OMAPI := true
 AERA_OMAPI_UUID := 534552454144595f48414c5f55554944
 
 # Modules Load
-AERA_LOAD_VENDOR_MODULES := "adsp_loader_dlkm.ko synaptics_tcm2.ko nxp-nci.ko stm_st54se_gpio.ko stm_nfc_i2c.ko"
+AERA_LOAD_VENDOR_MODULES := "drm_display_helper.ko qseecom_proxy.ko smcinvoke_dlkm.ko hdcp_qseecom_dlkm.ko gh_irq_lend.ko gh_mem_notifier.ko qcom_glink.ko qcom_glink_smem.ko qcom_smd.ko rproc_qcom_common.ko qmi_helpers.ko pdr_interface.ko pmic_glink.ko altmode-glink.ko redriver.ko repeater.ko ucsi_glink.ko wcd_usbss_i2c.ko dwc3-msm.ko msm_ext_display.ko sync_fence.ko msm_hw_fence.ko llcc-qcom.ko panel_event_notifier.ko msm-mmrm.ko pm8941-pwrkey.ko msm_drm.ko msm_sysstats.ko msm_performance.ko coresight.ko msm_kgsl.ko q6_pdr_dlkm.ko q6_notifier_dlkm.ko snd_event_dlkm.ko gpr_dlkm.ko spf_core_dlkm.ko qcom_sysmon.ko qcom_q6v5.ko qcom_pil_info.ko qcom_ramdump.ko qcom_q6v5_pas.ko adsp_loader_dlkm.ko xiaomi_touch.ko synaptics_tcm2.ko nxp-nci.ko stm_st54se_gpio.ko stm_nfc_i2c.ko cnss_utils.ko cnss_prealloc.ko cnss_plat_ipc_qmi_svc.ko pcie-pdc.ko pci-msm-drv.ko mhi.ko wlan_firmware_service.ko cnss2.ko"
+# Recovery lifecycle policy: defer WLAN/network leaves until primary data is accessible.
+AERA_POST_DECRYPT_MODULES := "rfkill.ko cfg80211.ko gsim.ko rmnet_mem.ko usb_f_gsi.ko ipam.ko cnss_nl.ko qca_cld3_kiwi_v2.ko"
 AERA_LOAD_VENDOR_MODULES_EXCLUDE_GKI := true
+
+# Wi-Fi
+TARGET_RECOVERY_DEVICE_MODULES += libnl libssl
+RECOVERY_LIBRARY_SOURCE_FILES += \
+    $(TARGET_OUT_SHARED_LIBRARIES)/libnl.so \
+    $(TARGET_OUT_SHARED_LIBRARIES)/libssl.so
