@@ -72,7 +72,12 @@ AERA_NO_ADDITIONAL_MIUI_PROPS_CHECK := 1
 AERA_NO_SPLASH_CHANGE               := 1
 AERA_USE_GREEN_LED                  := 0
 AERA_UNMOUNT_SDCARDS_BEFORE_REBOOT  := 1
-AERA_ENABLE_FRP_WIPE               := 1
+AERA_ENABLE_FRP_WIPE                := 1
+
+# -----------------------------------------------------------------------------
+# Wlan
+# -----------------------------------------------------------------------------
+AERA_ENABLE_WLAN := 1
 
 # -----------------------------------------------------------------------------
 # Logging
