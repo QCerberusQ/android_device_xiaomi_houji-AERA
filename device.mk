@@ -45,6 +45,10 @@ PRODUCT_EXTRA_RECOVERY_KEYS += \
 TWRP_REQUIRED_MODULES += \
     prebuilt
 
+# Adreno
+PRODUCT_VENDOR_PROPERTIES += \
+    ro.hardware.egl=adreno
+
 # Soong namespaces
 PRODUCT_SOONG_NAMESPACES += \
     $(DEVICE_PATH)
