@@ -28,6 +28,7 @@
 import /init.recovery.wifi.rc
 
 on early-init
+    export LD_LIBRARY_PATH /system/lib64:/vendor/lib64:/vendor/lib64/egl:/vendor/lib64/hw
     wait /sys/fs/selinux/enforce
     write /sys/fs/selinux/enforce 0
 
@@ -41,7 +42,7 @@ on early-fs
     write /proc/sys/walt/sched_lib_mask_force 255
 
 on fs
-    export LD_LIBRARY_PATH /system/lib64:/vendor/lib64:/vendor/lib64/hw
+    export LD_LIBRARY_PATH /system/lib64:/vendor/lib64:/vendor/lib64/egl:/vendor/lib64/hw
     wait /dev/block/platform/soc/${ro.boot.bootdevice}
     symlink /dev/block/platform/soc/${ro.boot.bootdevice} /dev/block/bootdevice
     write /proc/sys/kernel/firmware_config/force_sysfs_fallback 1

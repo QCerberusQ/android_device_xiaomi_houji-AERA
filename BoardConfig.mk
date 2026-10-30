@@ -204,3 +204,24 @@ TARGET_RECOVERY_DEVICE_MODULES += libnl libssl
 RECOVERY_LIBRARY_SOURCE_FILES += \
     $(TARGET_OUT_SHARED_LIBRARIES)/libnl.so \
     $(TARGET_OUT_SHARED_LIBRARIES)/libssl.so
+
+# Framework dependencies of the bundled Adreno EGL and Mapper4 libraries
+HOUJI_RECOVERY_GRAPHICS_LIBRARIES := \
+    android.hardware.graphics.common-V4-ndk \
+    android.hardware.graphics.common@1.0 \
+    android.hardware.graphics.common@1.1 \
+    android.hardware.graphics.common@1.2 \
+    android.hardware.graphics.mapper@2.0 \
+    android.hardware.graphics.mapper@2.1 \
+    android.hardware.graphics.mapper@3.0 \
+    android.hardware.graphics.mapper@4.0 \
+    libgralloctypes \
+    libhardware \
+    libjsoncpp \
+    libnativewindow \
+    libsync \
+    libui
+
+TARGET_RECOVERY_DEVICE_MODULES += $(HOUJI_RECOVERY_GRAPHICS_LIBRARIES)
+RECOVERY_LIBRARY_SOURCE_FILES += \
+    $(addprefix $(TARGET_OUT_SHARED_LIBRARIES)/,$(addsuffix .so,$(HOUJI_RECOVERY_GRAPHICS_LIBRARIES)))
