@@ -84,35 +84,29 @@ on property:twrp.modules.loaded=true
     start touch_report
     start vendor.qseecomd
     start vendor.health-default
-    umount /firmware
 
-on property:ro.crypto.state=encrypted && property:ro.boot.dynamic_partitions=true && property:twrp.super.symlinks_created=true && property:twrp.modules.loaded=true
+service aera-graphics-allocator /vendor/bin/hw/vendor.qti.hardware.display.allocator-service
+    class hal
+    seclabel u:r:recovery:s0
+    user root
+    group root graphics
+    capabilities SYS_NICE
+    # Do not spin every five seconds if a vendor/runtime mismatch prevents
+    # registration. A healthy allocator stays resident after its first start.
+    oneshot
+
+on property:ro.crypto.state=encrypted && property:ro.boot.dynamic_partitions=true
     start prepdecrypt.vendor
-
-on property:servicemanager.ready=true
-    chmod 0755 /vendor/bin/hw/vendor.qti.hardware.display.allocator-service
-    start vendor.qti.hardware.display.allocator
-    setprop sys.boot_completed 1
 
 on property:hwservicemanager.ready=true
     setprop sys.boot_completed 1
 
 on property:vendor.sys.listeners.registered=true
     start vendor.ssgtzd
-
-on property:vendor.sys.listeners.registered=true && property:servicemanager.ready=true
     start vendor.secure_element
-
-on property:crypto.ready=1 && property:vendor.sys.listeners.registered=true && property:servicemanager.ready=true
     start vendor.weaver_nxp
     start vendor.gatekeeper_default
+
+on property:crypto.ready=1
     start vendor.keymint-qti
     start vendor.keymint-strongbox
-
-service vendor.qti.hardware.display.allocator /vendor/bin/hw/vendor.qti.hardware.display.allocator-service
-    disabled
-    oneshot
-    user root
-    group root graphics drmrpc
-    capabilities SYS_NICE
-    seclabel u:r:recovery:s0
