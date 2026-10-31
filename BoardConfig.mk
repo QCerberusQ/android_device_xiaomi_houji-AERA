@@ -205,9 +205,18 @@ RECOVERY_LIBRARY_SOURCE_FILES += \
     $(TARGET_OUT_SHARED_LIBRARIES)/libnl.so \
     $(TARGET_OUT_SHARED_LIBRARIES)/libssl.so
 
+# Use the C++ runtime built with the recovery core.
+TARGET_RECOVERY_DEVICE_MODULES += libc++
+RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libc++.so
+
 # Framework dependencies of the bundled Adreno EGL and Mapper4 libraries
 HOUJI_RECOVERY_GRAPHICS_LIBRARIES := \
+    android.hardware.graphics.allocator@2.0 \
+    android.hardware.graphics.allocator@3.0 \
+    android.hardware.graphics.allocator@4.0 \
+    android.hardware.graphics.allocator-V2-ndk \
     android.hardware.graphics.common-V4-ndk \
+    android.hardware.graphics.common-V6-ndk \
     android.hardware.graphics.common@1.0 \
     android.hardware.graphics.common@1.1 \
     android.hardware.graphics.common@1.2 \
