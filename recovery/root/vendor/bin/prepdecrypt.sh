@@ -45,7 +45,11 @@ fi
 # Exit codes:
 # 0 Success
 # 1 Unknown encryption type
-# 2 Temp Mount Failure
+# 2 Preparation, mount, or property failure
+
+OWNED_MOUNTS=
+OWNED_DIRS=
+ROM_PROPS_READ=false
 
 # Function for logging to the recovery log
 log_print() {
@@ -85,49 +89,75 @@ relink() {
 	fi
 }
 
+cleanup_mounts() {
+	cleanup_failed=false
+	for mount_point in $OWNED_MOUNTS; do
+		if ! umount "$mount_point"; then
+			log_print 0 "Unable to unmount owned temporary mount $mount_point."
+			cleanup_failed=true
+		fi
+	done
+	OWNED_MOUNTS=
+	for mount_point in $OWNED_DIRS; do
+		rmdir "$mount_point" 2>/dev/null
+	done
+	OWNED_DIRS=
+	[ "$cleanup_failed" = false ]
+}
+
+valid_osver() {
+	[ "$1" != "$osver_twrp" ] &&
+		printf '%s\n' "$1" | grep -Eq '^[0-9]+(\.[0-9]+){0,2}$'
+}
+
+valid_patchlevel() {
+	[ "$1" != "$patchlevel_twrp" ] || return 1
+	printf '%s\n' "$1" | grep -Eq '^[1-9][0-9]{3}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$' || return 1
+	patch_year=${1%%-*}
+	patch_month=${1#*-}
+	patch_day=${patch_month#*-}
+	patch_day=${patch_day#0}
+	patch_month=${patch_month%%-*}
+	patch_days=31
+	case "$patch_month" in
+	04 | 06 | 09 | 11) patch_days=30 ;;
+	02)
+		patch_days=28
+		if [ $((patch_year % 4)) -eq 0 ] && { [ $((patch_year % 100)) -ne 0 ] || [ $((patch_year % 400)) -eq 0 ]; }; then
+			patch_days=29
+		fi
+		;;
+	esac
+	[ "$patch_day" -le "$patch_days" ]
+}
+
 finish() {
-	if [ "$SETPATCH" = "true" ]; then
-		is_system_mounted=$(getprop $SCRIPTNAME.system_mounted)
-		if [ "$is_system_mounted" = 1 ]; then
-			umount "$TEMPSYS"
-			$setprop_bin $SCRIPTNAME.system_mounted 0
-			rmdir "$TEMPSYS"
-		fi
-		if [ "$MNT_VENDOR" = "true" ]; then
-			is_vendor_mounted=$(getprop $SCRIPTNAME.vendor_mounted)
-			if [ "$is_vendor_mounted" = 1 ]; then
-				umount "$TEMPVEN"
-				$setprop_bin $SCRIPTNAME.vendor_mounted 0
-				rmdir "$TEMPVEN"
-			fi
-		fi
+	if [ "$ROM_PROPS_READ" != true ] ||
+		! valid_osver "$osver" || ! valid_patchlevel "$patchlevel" ||
+		! valid_patchlevel "$venpatchlevel_device" ||
+		[ "$(getprop ro.build.version.release)" != "$osver" ] ||
+		[ "$(getprop ro.build.version.security_patch)" != "$patchlevel" ] ||
+		[ "$(getprop ro.vendor.build.security_patch)" != "$venpatchlevel_device" ]; then
+		log_print 0 "Installed ROM properties have not been read and verified."
+		finish_error
 	fi
-	setprop crypto.ready 1
+	cleanup_mounts || finish_error
+	if ! setprop crypto.ready 1 || [ "$(getprop crypto.ready)" != 1 ]; then
+		log_print 0 "Unable to publish crypto readiness."
+		finish_error
+	fi
 	log_print 1 "crypto.ready=$(getprop crypto.ready)"
 	log_print 1 "Script complete. Device ready for decryption."
 	exit 0
 }
 
 finish_error() {
-	if [ "$SETPATCH" = "true" ]; then
-		is_system_mounted=$(getprop $SCRIPTNAME.system_mounted)
-		if [ "$is_system_mounted" = 1 ]; then
-			umount "$TEMPSYS"
-			$setprop_bin $SCRIPTNAME.system_mounted 0
-			rmdir "$TEMPSYS"
-		fi
-		if [ "$MNT_VENDOR" = "true" ]; then
-			is_vendor_mounted=$(getprop $SCRIPTNAME.vendor_mounted)
-			if [ "$is_vendor_mounted" = 1 ]; then
-				umount "$TEMPVEN"
-				$setprop_bin $SCRIPTNAME.vendor_mounted 0
-				rmdir "$TEMPVEN"
-			fi
-		fi
+	if ! setprop crypto.ready 0 || [ "$(getprop crypto.ready)" != 0 ]; then
+		log_print 0 "Unable to clear crypto readiness."
 	fi
-	setprop crypto.ready 1
-	log_print 0 "Script run incomplete. Device may not be ready for decryption."
-	exit 2
+	cleanup_mounts
+	log_print 0 "Preparation failed. Crypto readiness was not granted."
+	exit "${1:-2}"
 }
 
 osver_default_value() {
@@ -187,8 +217,7 @@ check_encrypt() {
 		log_print 1 "Full Device Encryption (FDE) found."
 	else
 		log_print 0 "Unknown decryption type or type not set. Exiting script."
-		setprop crypto.ready 1
-		exit 1
+		finish_error 1
 	fi
 }
 
@@ -214,39 +243,54 @@ check_fastboot_boot() {
 }
 
 check_resetprop() {
-	if [ -e /system/bin/resetprop ] || [ -e /sbin/resetprop ]; then
-		log_print 2 "Resetprop binary found!"
-		setprop_bin=resetprop
+	if [ -x /system/bin/resetprop ]; then
+		setprop_bin=/system/bin/resetprop
+	elif [ -x /sbin/resetprop ]; then
+		setprop_bin=/sbin/resetprop
 	else
-		log_print 2 "Resetprop binary not found. Falling back to setprop."
-		setprop_bin=setprop
+		log_print 0 "Resetprop is required to update read-only crypto properties."
+		finish_error
 	fi
 }
 
+mount_matches() {
+	expected_device=$(readlink -f "$2") || return 1
+	[ -b "$expected_device" ] || return 1
+	mount_record=$(awk -v point="$1" '$2 == point { print $1, $3, $4 }' /proc/mounts) || return 1
+	set -- $mount_record
+	[ "$#" -eq 3 ] || return 1
+	[ "$(readlink -f "$1")" = "$expected_device" ] || return 1
+	case "$2" in ext4 | erofs) ;; *) return 1 ;; esac
+	case ",$3," in *,ro,*) return 0 ;; *) return 1 ;; esac
+}
+
 temp_mount() {
-	is_mounted=$(ls -A "$1" 2>/dev/null)
-	if [ -n "$is_mounted" ]; then
-		log_print 1 "$2 already mounted."
-	else
-		mkdir "$1"
-		if [ -d "$1" ]; then
-			log_print 2 "Temporary $2 folder created at $1."
-		else
-			log_print 0 "Unable to create temporary $2 folder."
+	if awk -v point="$1" '$2 == point { found=1 } END { exit !found }' /proc/mounts; then
+		if ! mount_matches "$1" "$3"; then
+			log_print 0 "Existing $2 mount has the wrong device, filesystem, or access mode."
 			finish_error
 		fi
-		mount -o ro "$3" "$1"
-		is_mounted=$(ls -A "$1" 2>/dev/null)
-		if [ -n "$is_mounted" ]; then
-			log_print 2 "$2 mounted at $1."
-			$setprop_bin $SCRIPTNAME."$2"_mounted 1
-			log_print 2 "$SCRIPTNAME.$2_mounted=$(getprop "$SCRIPTNAME"."$2"_mounted)"
-		else
-			log_print 0 "Unable to mount $2 to temporary folder."
+	else
+		if [ ! -d "$1" ]; then
+			mkdir "$1" || finish_error
+			OWNED_DIRS="$1 $OWNED_DIRS"
+		fi
+		if ! mount -o ro "$3" "$1"; then
+			log_print 0 "Unable to mount $2 read-only."
+			finish_error
+		fi
+		OWNED_MOUNTS="$1 $OWNED_MOUNTS"
+		if ! mount_matches "$1" "$3"; then
+			log_print 0 "Temporary $2 mount did not match the requested read-only device."
 			finish_error
 		fi
 	fi
 }
+
+if ! setprop crypto.ready 0 || [ "$(getprop crypto.ready)" != 0 ]; then
+	log_print 0 "Unable to clear crypto readiness before preparation."
+	exit 2
+fi
 
 osver=$(getprop ro.build.version.release)
 osver_orig=$(getprop ro.build.version.release_orig)
@@ -357,25 +401,28 @@ if [ "$sdkver" -ge 26 ]; then
 					venpatchlevel=$(getprop ro.vendor.build.security_patch)
 					log_print 2 "Current Vendor Security Patch Level: $venpatchlevel"
 					venpatchlevel_device=$(grep -i -m 1 'ro.vendor.build.security_patch=' "$TEMPVEN/$BUILDPROP" | cut -f2 -d'=' -s)
-					if ! [ "$venpatchlevel" = "venpatchlevel_device" ]; then
-						$setprop_bin "ro.vendor.build.security_patch" "$venpatchlevel_device"
-						sed -i "s/ro.vendor.build.security_patch=.*/ro.vendor.build.security_patch=""$venpatchlevel_device""/g" "/$DEFAULTPROP"
+					valid_patchlevel "$venpatchlevel_device" || finish_error
+					if ! [ "$venpatchlevel" = "$venpatchlevel_device" ]; then
+						"$setprop_bin" "ro.vendor.build.security_patch" "$venpatchlevel_device" || finish_error
+						sed -i "s/ro.vendor.build.security_patch=.*/ro.vendor.build.security_patch=""$venpatchlevel_device""/g" "/$DEFAULTPROP" || finish_error
 						venpatchlevel_new=$(getprop ro.vendor.build.security_patch)
 						venpatchlevel_default=$(grep -i -m 1 'ro.vendor.build.security_patch=' /$DEFAULTPROP | cut -f2 -d'=' -s)
 						if [ "$venpatchlevel_device" = "$venpatchlevel_new" ]; then
 							log_print 2 "$setprop_bin successful! New Vendor Security Patch Level: $venpatchlevel_new"
 						else
 							log_print 0 "$setprop_bin failed. Vendor Security Patch Level unchanged."
+							finish_error
 						fi
 						if [ "$venpatchlevel_device" = "$venpatchlevel_default" ]; then
 							log_print 2 "$DEFAULTPROP update successful! ro.vendor.build.security_patch=$venpatchlevel_default"
 						else
 							log_print 0 "$DEFAULTPROP update failed. Vendor Security Patch Level unchanged."
+							finish_error
 						fi
 					else
 						venpatchlevel_default=$(grep -i -m 1 'ro.vendor.build.security_patch=' /$DEFAULTPROP | cut -f2 -d'=' -s)
 						if ! [ "$venpatchlevel_device" = "$venpatchlevel_default" ]; then
-							sed -i "s/ro.vendor.build.security_patch=.*/ro.vendor.build.security_patch=""$venpatchlevel_device""/g" "/$DEFAULTPROP"
+							sed -i "s/ro.vendor.build.security_patch=.*/ro.vendor.build.security_patch=""$venpatchlevel_device""/g" "/$DEFAULTPROP" || finish_error
 						fi
 					fi
 				else
@@ -407,40 +454,47 @@ if [ "$sdkver" -ge 26 ]; then
 				log_print 2 "Current system is Oreo or above. Proceed with setting OS Version & Security Patch Level..."
 				log_print 2 "Current OS Version: $osver"
 				osver=$(grep -i -m 1 'ro.build.version.release=' "$TEMPSYS/$BUILDPROP" | cut -f2 -d'=' -s)
+				valid_osver "$osver" || finish_error
 				if [ -n "$osver" ]; then
-					$setprop_bin "ro.build.version.release" "$osver"
-					sed -i "s/ro.build.version.release=.*/ro.build.version.release=""$osver""/g" "/$DEFAULTPROP"
+					"$setprop_bin" "ro.build.version.release" "$osver" || finish_error
+					sed -i "s/ro.build.version.release=.*/ro.build.version.release=""$osver""/g" "/$DEFAULTPROP" || finish_error
 					osver_new=$(getprop ro.build.version.release)
 					osver_default=$(grep -i -m 1 'ro.build.version.release=' /$DEFAULTPROP | cut -f2 -d'=' -s)
 					if [ "$osver" = "$osver_new" ]; then
 						log_print 2 "$setprop_bin successful! New OS Version: $osver_new"
 					else
 						log_print 0 "$setprop_bin failed. OS Version unchanged."
+						finish_error
 					fi
 					if [ "$osver" = "$osver_default" ]; then
 						log_print 2 "$DEFAULTPROP update successful! ro.build.version.release=$osver_default"
 					else
 						log_print 0 "$DEFAULTPROP update failed. OS Version unchanged."
+						finish_error
 					fi
 				fi
 				log_print 2 "Current Security Patch Level: $patchlevel"
 				patchlevel=$(grep -i -m 1 'ro.build.version.security_patch=' "$TEMPSYS/$BUILDPROP" | cut -f2 -d'=' -s)
+				valid_patchlevel "$patchlevel" || finish_error
 				if [ -n "$patchlevel" ]; then
-					$setprop_bin "ro.build.version.security_patch" "$patchlevel"
-					sed -i "s/ro.build.version.security_patch=.*/ro.build.version.security_patch=""$patchlevel""/g" "/$DEFAULTPROP"
+					"$setprop_bin" "ro.build.version.security_patch" "$patchlevel" || finish_error
+					sed -i "s/ro.build.version.security_patch=.*/ro.build.version.security_patch=""$patchlevel""/g" "/$DEFAULTPROP" || finish_error
 					patchlevel_new=$(getprop ro.build.version.security_patch)
 					patchlevel_default=$(grep -i -m 1 'ro.build.version.security_patch=' /$DEFAULTPROP | cut -f2 -d'=' -s)
 					if [ "$patchlevel" = "$patchlevel_new" ]; then
 						log_print 2 "$setprop_bin successful! New Security Patch Level: $patchlevel_new"
 					else
 						log_print 0 "$setprop_bin failed. Security Patch Level unchanged."
+						finish_error
 					fi
 					if [ "$patchlevel" = "$patchlevel_default" ]; then
 						log_print 2 "$DEFAULTPROP update successful! ro.build.version.security_patch=$patchlevel_default"
 					else
 						log_print 0 "$DEFAULTPROP update failed. Security Patch Level unchanged."
+						finish_error
 					fi
 				fi
+				ROM_PROPS_READ=true
 				finish
 			else
 				log_print 2 "Current vendor is Nougat or older. Skipping vendor security patch level setting..."
