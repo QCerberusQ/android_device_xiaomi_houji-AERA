@@ -68,7 +68,7 @@ if [ "$1" = "$FDEVICE" -o "$AERA_BUILD_DEVICE" = "$FDEVICE" ]; then
 	# -----------------------------------------------------------------------
 	# Storage / Theme Paths
 	# -----------------------------------------------------------------------
-	export AERA_SETTINGS_ROOT_DIRECTORY=/persist/recovery
+	export AERA_SETTINGS_ROOT_DIRECTORY=/data/recovery
 	export AERA_MISCELLANEOUS_ROOT_DIRECTORY=/sdcard
 
 	# -----------------------------------------------------------------------

@@ -13,7 +13,6 @@ AERA_MAINTAINER := QCerberusQ
 # Screen / cutout
 # -----------------------------------------------------------------------------
 #
-AERA_SCREEN_H             := 2400
 AERA_STATUS_H             := 120
 AERA_STATUS_INDENT_LEFT   := 48
 AERA_STATUS_INDENT_RIGHT  := 48

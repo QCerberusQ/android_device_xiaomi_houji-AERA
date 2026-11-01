@@ -144,6 +144,8 @@ BOOT_SECURITY_PATCH     := $(PLATFORM_SECURITY_PATCH)
 
 # Display & UI
 AERA_THEME := portrait_hdpi
+AERA_UI_ADAPTIVE_RESOLUTION := true
+AERA_SCREEN_H := 2403
 AERA_MAX_BRIGHTNESS := 2047
 AERA_DEFAULT_BRIGHTNESS := 1200
 AERA_BRIGHTNESS_PATH := "/sys/class/backlight/panel0-backlight/brightness"
@@ -178,9 +180,15 @@ AERA_INCLUDE_LPTOOLS := true
 # Debugging & Logging
 TARGET_USES_LOGD := true
 AERA_INCLUDE_LOGCAT := true
-TARGET_RECOVERY_DEVICE_MODULES += debuggerd
-RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/debuggerd
-# DT_NEEDED dependencies of debuggerd, lpdumpd, and liblpdump from this build.
+# The Android module is crash_dump; its ARM64 installed filename is crash_dump64.
+TARGET_RECOVERY_DEVICE_MODULES += debuggerd crash_dump service
+RECOVERY_BINARY_SOURCE_FILES += \
+    $(TARGET_OUT_EXECUTABLES)/debuggerd \
+    $(TARGET_OUT_EXECUTABLES)/crash_dump64 \
+    $(TARGET_OUT_EXECUTABLES)/service \
+    $(TARGET_RECOVERY_ROOT_OUT)/system/bin/linker64
+# Diagnostic dependencies; the image checker also checks the crash helper's
+# PT_INTERP and complete DT_NEEDED closure, including the recovery linker.
 HOUJI_RECOVERY_DIAGNOSTIC_LIBRARIES := \
     libdebuggerd_client \
     libprocinfo \
