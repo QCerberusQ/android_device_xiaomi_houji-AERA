@@ -55,17 +55,18 @@ while [ "$attempts" -lt 30 ]; do
     [ "$(getprop post.decrypt.modules)" = true ] || fail "Primary userdata stage was reset."
     modem_device=$(readlink -f "/dev/block/bootdevice/by-name/modem$slot")
     firmware_ready=false
+    # CNSS selects the firmware files for the detected chip after fs_ready.
+    # A separate m3.bin is not a prerequisite for signaling that the filesystem
+    # is ready. Firmware/calibration failures must still keep wifi.driver.ready
+    # false until the driver creates wlan0.
     if [ -b "$modem_device" ] &&
-        readonly_mount "$firmware" /image/kiwi vfat "$modem_device"; then
-        for amss in "$firmware/amss.bin" "$firmware/amss20.bin"; do
-            [ -f "$amss" ] && [ -r "$amss" ] && [ -s "$amss" ] || continue
-            [ -f "$firmware/m3.bin" ] && [ -r "$firmware/m3.bin" ] &&
-                [ -s "$firmware/m3.bin" ] && firmware_ready=true
-        done
+        readonly_mount "$firmware" /image/kiwi vfat "$modem_device" &&
+        [ -d "$firmware" ] && [ -r "$firmware" ] && [ -x "$firmware" ]; then
+        firmware_ready=true
     fi
 
     if [ "$firmware_ready" != true ]; then
-        reason="No slot-matched read-only Kiwi bind with readable amss/m3 firmware."
+        reason="No accessible slot-matched read-only Kiwi firmware bind."
     elif ! [ -r /vendor/etc/wifi/kiwi_v2/WCNSS_qcom_cfg.ini ] ||
         ! [ -s /vendor/etc/wifi/kiwi_v2/WCNSS_qcom_cfg.ini ]; then
         reason="The Houji Kiwi INI is unavailable."
@@ -75,14 +76,17 @@ while [ "$attempts" -lt 30 ]; do
             [ "$(getprop post.decrypt.modules)" = true ] || fail "Primary userdata stage was reset."
             setprop wifi.driver.ready true || fail "Cannot publish driver readiness."
             [ "$(getprop wifi.driver.ready)" = true ] || fail "Driver readiness readback failed."
-            log "Verified Kiwi firmware, AERA WLAN configuration and wlan0."
+            log "Verified active-slot Kiwi mount, AERA WLAN configuration and wlan0."
             exit 0
         fi
         if [ "$cnss_ready" = false ]; then
-            for ready in /sys/bus/platform/drivers/cnss2/*/fs_ready; do
+            # Use Houji's stock endpoint first; retain the device-path fallback.
+            for ready in /sys/kernel/cnss/fs_ready /sys/bus/platform/drivers/cnss2/*/fs_ready; do
                 [ -w "$ready" ] || continue
                 printf '1\n' >"$ready" || fail "Cannot signal CNSS2 at $ready."
                 cnss_ready=true
+                log "Signaled CNSS2 fs_ready at $ready; waiting for calibration and wlan0."
+                break
             done
         fi
         reason="Waiting for a writable bound CNSS2 fs_ready endpoint and wlan0 (cnss=$cnss_ready)."
@@ -91,4 +95,4 @@ while [ "$attempts" -lt 30 ]; do
     sleep 1 || fail "Readiness wait failed."
 done
 
-fail "Timed out after 30s: $reason Check dmesg and the module/kernel ABI."
+fail "Timed out after 30s: $reason Check dmesg for CNSS/firmware errors."

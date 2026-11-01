@@ -13,9 +13,10 @@ AERA_MAINTAINER := QCerberusQ
 # Screen / cutout
 # -----------------------------------------------------------------------------
 #
-AERA_STATUS_H             := 120
-AERA_STATUS_INDENT_LEFT   := 48
-AERA_STATUS_INDENT_RIGHT  := 48
+# Native 1440-wide metrics: 150px bar and 60px side insets on Houji's 1200px panel.
+AERA_STATUS_H             := 180
+AERA_STATUS_INDENT_LEFT   := 72
+AERA_STATUS_INDENT_RIGHT  := 72
 AERA_HIDE_NOTCH           := 1
 AERA_CLOCK_POS            := 1
 AERA_ALLOW_DISABLE_NAVBAR := 0
