@@ -1,0 +1,95 @@
+# Open the disconnect socket before userdata becomes accessible. The manager
+# starts the native supervisor once module staging and both Binder managers are ready.
+on init
+    start aera-houji-radio-manager
+
+on property:init.svc.aera-houji-radio-manager=stopped
+    write /tmp/aera-houji-radio-stop 1
+
+# Emergency cleanup if the supervisor is killed instead of completing shutdown.
+# Keep ownership set: the manager must retain its lease until MPSS is offline.
+on property:init.svc.aera-houji-radio=stopped && property:vendor.houji.radio.owned=1
+    stop vendor.qcrild2
+    stop vendor.qcrild
+    stop vendor.ipacm
+    stop vendor.per_proxy
+    stop vendor.per_mgr
+    stop vendor.rmt_storage
+
+service aera-houji-radio-manager /system/bin/aera-houji-radio-manager
+    class core
+    disabled
+    oneshot
+    user root
+    group root radio system inet
+    socket aera-cellular seqpacket 0600 root root
+    seclabel u:r:recovery:s0
+    stdio_to_kmsg
+
+service aera-houji-radio /system/bin/sh /system/bin/aera-houji-radio.sh
+    class hal
+    disabled
+    oneshot
+    user root
+    group root radio system inet
+    seclabel u:r:recovery:s0
+    stdio_to_kmsg
+
+service vendor.rmt_storage /system/bin/sh /system/bin/aera-houji-stock-service.sh rmt-storage
+    class hal
+    disabled
+    oneshot
+    user root
+    shutdown critical
+    ioprio rt 0
+    seclabel u:r:recovery:s0
+    stdio_to_kmsg
+
+service vendor.per_mgr /system/bin/sh /system/bin/aera-houji-stock-service.sh per-mgr
+    class hal
+    disabled
+    oneshot
+    user system
+    group system
+    ioprio rt 4
+    seclabel u:r:recovery:s0
+    stdio_to_kmsg
+
+service vendor.per_proxy /system/bin/sh /system/bin/aera-houji-stock-service.sh per-proxy
+    class hal
+    disabled
+    oneshot
+    user system
+    group system
+    seclabel u:r:recovery:s0
+    stdio_to_kmsg
+
+service vendor.ipacm /system/bin/sh /system/bin/aera-houji-stock-service.sh ipacm
+    class hal
+    disabled
+    oneshot
+    user radio
+    group radio inet
+    capabilities NET_ADMIN NET_RAW
+    seclabel u:r:recovery:s0
+    stdio_to_kmsg
+
+service vendor.qcrild /system/bin/sh /system/bin/aera-houji-stock-service.sh qcrild
+    class hal
+    disabled
+    oneshot
+    user radio
+    group radio cache inet misc audio log readproc wakelock 2901 2912
+    capabilities BLOCK_SUSPEND NET_ADMIN NET_RAW
+    seclabel u:r:recovery:s0
+    stdio_to_kmsg
+
+service vendor.qcrild2 /system/bin/sh /system/bin/aera-houji-stock-service.sh qcrild2
+    class hal
+    disabled
+    oneshot
+    user radio
+    group radio cache inet misc audio log readproc wakelock 2901 2912
+    capabilities BLOCK_SUSPEND NET_ADMIN NET_RAW
+    seclabel u:r:recovery:s0
+    stdio_to_kmsg

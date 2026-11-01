@@ -1,0 +1,16 @@
+# source-partition source-relative-path recovery-target
+vendor lib64/libqcrilNrVoiceModule.so /vendor/lib64/libqcrilNrVoiceModule.so
+vendor lib64/libqcrilNrSmsModule.so /vendor/lib64/libqcrilNrSmsModule.so
+vendor lib64/libqcrilNrCellInfoModule.so /vendor/lib64/libqcrilNrCellInfoModule.so
+vendor lib64/libqcrilNrImsModule.so /vendor/lib64/libqcrilNrImsModule.so
+vendor lib64/libqcrilNrPbmModule.so /vendor/lib64/libqcrilNrPbmModule.so
+vendor lib64/libqcrilDataModule.so /vendor/lib64/libqcrilDataModule.so
+vendor lib64/libqcrilNrSocketModule.so /vendor/lib64/libqcrilNrSocketModule.so
+vendor lib64/deviceInfoServiceModuleNr.so /vendor/lib64/deviceInfoServiceModuleNr.so
+vendor lib64/libqcrildataaidl.so /vendor/lib64/libqcrildataaidl.so
+vendor lib64/libqcrildatactl.so /vendor/lib64/libqcrildatactl.so
+vendor lib64/libqcrildataqos.so /vendor/lib64/libqcrildataqos.so
+vendor etc/qcril_database /vendor/etc/qcril_database
+vendor etc/seccomp_policy/qcrilnr@2.0.policy /vendor/etc/seccomp_policy/qcrilnr@2.0.policy
+vendor etc/IPACM_cfg.xml /vendor/etc/IPACM_cfg.xml
+vendor etc/IPACM_Filter_cfg.xml /vendor/etc/IPACM_Filter_cfg.xml

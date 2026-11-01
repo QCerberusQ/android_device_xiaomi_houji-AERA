@@ -22,6 +22,14 @@ $(call inherit-product, vendor/twrp/config/common.mk)
 # Device-specific Aera configuration
 $(call inherit-product-if-exists, $(DEVICE_PATH)/aera_houji.mk)
 
+# Device-side PCM bridge and primary HAL opener; the ROM supplies the audio HAL.
+PRODUCT_PACKAGES += \
+    aera-audio-bridge \
+    aera-audio-primary-opener
+
+# Automatic native radio startup and AERA storage-operation disconnect handling.
+PRODUCT_PACKAGES += aera-houji-radio-manager
+
 # API
 BOARD_SHIPPING_API_LEVEL := 34
 PRODUCT_SHIPPING_API_LEVEL := 34

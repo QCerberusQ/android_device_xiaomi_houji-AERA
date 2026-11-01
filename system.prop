@@ -8,3 +8,6 @@ vendor.gatekeeper.is_security_level_spu=0
 
 # Battery Property
 ro.charger.enable_suspend=1
+
+# Stock Houji primary audio HAL (global platform remains xiaomi_sm8650).
+ro.hardware.audio.primary=pineapple

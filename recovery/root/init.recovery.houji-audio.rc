@@ -1,0 +1,66 @@
+# Bootstrap off the UI thread once the existing userdata/module path has finished.
+on property:post.decrypt.modules=true && property:hwservicemanager.ready=true && property:servicemanager.ready=true
+    start aera-houji-audio-bootstrap
+
+service aera-houji-audio-bootstrap /system/bin/sh /system/bin/aera_audio_bootstrap.sh
+    class hal
+    disabled
+    oneshot
+    user root
+    group root audio system media
+    seclabel u:r:recovery:s0
+    stdio_to_kmsg
+
+service aera-houji-pd-mapper /system/bin/sh /system/bin/aera-houji-stock-service.sh pd-mapper
+    class hal
+    disabled
+    oneshot
+    user system
+    group system
+    seclabel u:r:recovery:s0
+    stdio_to_kmsg
+
+service aera-houji-dspservice /system/bin/sh /system/bin/aera-houji-stock-service.sh dspservice
+    class hal
+    disabled
+    oneshot
+    user system
+    group system wakelock 2908
+    capabilities BLOCK_SUSPEND
+    interface vendor.qti.hardware.dsp@1.0::IDspService dspservice
+    seclabel u:r:recovery:s0
+    stdio_to_kmsg
+
+service aera-houji-audiopd /system/bin/sh /system/bin/aera-houji-stock-service.sh audiopd
+    class hal
+    disabled
+    oneshot
+    user media
+    group media
+    seclabel u:r:recovery:s0
+    stdio_to_kmsg
+
+service aera-houji-audio-hal /system/bin/sh /system/bin/aera-houji-stock-service.sh audio-hal
+    class hal
+    disabled
+    oneshot
+    user root
+    group root audio system media
+    capabilities BLOCK_SUSPEND SYS_NICE
+    socket audio_holder_socket_0 seqpacket 0666 system system
+    socket audio_us_socket_0 seqpacket 0666 system system
+    interface android.hardware.audio@7.1::IDevicesFactory default
+    interface android.hardware.audio.effect@7.0::IEffectsFactory default
+    interface vendor.qti.hardware.AGMIPC@1.0::IAGM default
+    interface vendor.qti.hardware.pal@1.0::IPAL default
+    seclabel u:r:recovery:s0
+    stdio_to_kmsg
+
+service aera-audio-primary-opener /system/bin/aera-audio-primary-opener
+    class hal
+    disabled
+    oneshot
+    user root
+    group root audio
+    seclabel u:r:recovery:s0
+    stdio_to_kmsg

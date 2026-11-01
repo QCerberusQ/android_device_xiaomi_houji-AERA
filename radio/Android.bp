@@ -1,0 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
+cc_binary {
+    name: "aera-houji-radio-manager",
+    recovery: true,
+    srcs: ["houji_radio_manager.cpp"],
+    shared_libs: ["libcutils"],
+    cpp_std: "c++17",
+    cflags: ["-Wall", "-Wextra", "-Werror"],
+}

@@ -26,6 +26,8 @@
 #
 
 import /init.recovery.wifi.rc
+import /init.recovery.houji-audio.rc
+import /init.recovery.houji-radio.rc
 
 on early-init
     export LD_LIBRARY_PATH /system/lib64:/vendor/lib64:/vendor/lib64/egl:/vendor/lib64/hw
