@@ -36,6 +36,9 @@ readonly_mount() {
 
 setprop wifi.driver.ready false || fail "Cannot clear driver readiness."
 [ "$(getprop wifi.driver.ready)" = false ] || fail "Driver readiness clear did not persist."
+# Validate access and the live modules even if the native loader published the
+# property. This also makes UI retries use the same device-specific load path.
+/system/bin/sh /vendor/bin/aera-post-decrypt-modules.sh || fail "Primary userdata or deferred modules are not ready."
 [ "$(getprop post.decrypt.modules)" = true ] || fail "Primary userdata stage is incomplete."
 
 slot=$(getprop ro.boot.slot_suffix)
@@ -44,15 +47,13 @@ case "$slot" in
     *) fail "Missing or invalid Houji modem slot: $slot." ;;
 esac
 firmware=/vendor/firmware_mnt/image/kiwi
-persist=/mnt/aera-wlan-persist
 cnss_ready=false
 attempts=0
-reason="Firmware and calibration have not been verified."
+reason="Kiwi firmware has not been verified."
 
 while [ "$attempts" -lt 30 ]; do
     [ "$(getprop post.decrypt.modules)" = true ] || fail "Primary userdata stage was reset."
     modem_device=$(readlink -f "/dev/block/bootdevice/by-name/modem$slot")
-    persist_device=$(readlink -f /dev/block/bootdevice/by-name/persist)
     firmware_ready=false
     if [ -b "$modem_device" ] &&
         readonly_mount "$firmware" /image/kiwi vfat "$modem_device"; then
@@ -65,10 +66,6 @@ while [ "$attempts" -lt 30 ]; do
 
     if [ "$firmware_ready" != true ]; then
         reason="No slot-matched read-only Kiwi bind with readable amss/m3 firmware."
-    elif ! [ -b "$persist_device" ] ||
-        ! readonly_mount "$persist" / ext4 "$persist_device" ||
-        ! [ -r "$persist/wlan/wlan_mac.bin" ] || ! [ -s "$persist/wlan/wlan_mac.bin" ]; then
-        reason="Live persist WLAN calibration is unavailable or its mount is unverified."
     elif ! [ -r /vendor/etc/wifi/kiwi_v2/WCNSS_qcom_cfg.ini ] ||
         ! [ -s /vendor/etc/wifi/kiwi_v2/WCNSS_qcom_cfg.ini ]; then
         reason="The Houji Kiwi INI is unavailable."
@@ -78,7 +75,7 @@ while [ "$attempts" -lt 30 ]; do
             [ "$(getprop post.decrypt.modules)" = true ] || fail "Primary userdata stage was reset."
             setprop wifi.driver.ready true || fail "Cannot publish driver readiness."
             [ "$(getprop wifi.driver.ready)" = true ] || fail "Driver readiness readback failed."
-            log "Verified Kiwi firmware, live calibration and wlan0."
+            log "Verified Kiwi firmware, AERA WLAN configuration and wlan0."
             exit 0
         fi
         if [ "$cnss_ready" = false ]; then

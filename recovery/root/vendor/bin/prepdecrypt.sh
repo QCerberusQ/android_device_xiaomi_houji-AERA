@@ -44,7 +44,6 @@ fi
 
 # Exit codes:
 # 0 Success
-# 1 Unknown encryption type
 # 2 Preparation, mount, or property failure
 
 OWNED_MOUNTS=
@@ -216,8 +215,9 @@ check_encrypt() {
 	elif [ "$encrypt_type" = "block" ]; then
 		log_print 1 "Full Device Encryption (FDE) found."
 	else
-		log_print 0 "Unknown decryption type or type not set. Exiting script."
-		finish_error 1
+		# This script prepares KeyMint's OS/patch properties; it does not
+		# decrypt userdata. DFE may leave both crypto properties unset.
+		log_print 1 "Encryption type is unset or unknown; preparing KeyMint properties without decrypting userdata."
 	fi
 }
 

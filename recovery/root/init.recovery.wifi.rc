@@ -1,11 +1,24 @@
-# Houji uses the PCIe CNSS2/Kiwi stack. Aera owns all module insertion.
+# Houji uses the PCIe CNSS2/Kiwi stack and AERA's staged module files.
 on init
+    setprop post.decrypt.modules false
     setprop wifi.driver.ready false
     setprop sys.aera.wlan.up 0
     mkdir /vendor/firmware/wlan/qca_cld/kiwi_v2 0755 root root
     symlink /vendor/etc/wifi/kiwi_v2/WCNSS_qcom_cfg.ini /vendor/firmware/wlan/qca_cld/kiwi_v2/WCNSS_qcom_cfg.ini
-    symlink /mnt/aera-wlan-persist/wlan/wlan_mac.bin /vendor/firmware/wlan/qca_cld/kiwi_v2/wlan_mac.bin
+    # AERA prepares wlan_mac.bin in the writable ramdisk before WLAN insertion.
     chmod 0755 /vendor/bin/aera-wlan-ready.sh
+
+on property:twrp.modules.loaded=true
+    start aera-post-decrypt-modules
+
+on property:twrp.decrypt.done=true && property:twrp.modules.loaded=true
+    start aera-post-decrypt-modules
+
+on property:sys.usb.config.aera_fastbootd=1
+    stop aera-post-decrypt-modules
+
+on property:sys.usb.config.aera_fastbootd=0 && property:twrp.modules.loaded=true
+    start aera-post-decrypt-modules
 
 # This is primary-user-data completion, not crypto HAL preparation (crypto.ready).
 on property:post.decrypt.modules=true
@@ -27,6 +40,17 @@ on property:wifi.driver.ready=true && property:post.decrypt.modules=true
 on property:sys.aera.wlan.up=1 && property:post.decrypt.modules=true
     setprop sys.aera.wlan.up 0
     start aera-wlan-ready
+
+on property:sys.aera.wlan.up=1 && property:post.decrypt.modules=false
+    setprop sys.aera.wlan.up 0
+    start aera-post-decrypt-modules
+
+service aera-post-decrypt-modules /system/bin/sh /vendor/bin/aera-post-decrypt-modules.sh --wait
+    disabled
+    oneshot
+    user root
+    group root wifi inet
+    seclabel u:r:recovery:s0
 
 service wpa_supplicant /system/bin/wpa_supplicant -Dnl80211 -iwlan0 -O/tmp/recovery/sockets -c/vendor/etc/wifi/wpa_supplicant.conf
     disabled
