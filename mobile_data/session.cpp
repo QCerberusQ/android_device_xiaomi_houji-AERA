@@ -392,6 +392,9 @@ void Session::StartModem() {
   const auto reason=Capability();if(!reason.empty())throw std::runtime_error(reason);
   modem=ModemPath();
   if(Read(modem+"/state")!="offline")throw std::runtime_error("The modem is already running outside AERA mobile data; reboot recovery first");
+  Log("Exposing factory PFM licenses before modem startup");
+  if(Run({"/system/bin/sh","/system/bin/aera-houji-cellular-prepare.sh"})!=0)
+    throw std::runtime_error("Factory modem licenses are unavailable; inspect the recovery log");
   // Houji's deferred loader already inserts gsim, rmnet_mem, usb_f_gsi and ipam.
   Log("Loading RMNET control, IPA netmanager and RMNET core");
   Module("rmnet_ctl");Module("ipanetm");Module("rmnet_core");
@@ -419,6 +422,17 @@ void Session::StartModem() {
   }
   if(!ready)throw std::runtime_error("Modem storage services are not ready");
   Log("QRTR RMTFS (14) and TFTP (4096) endpoints published");
+  // A modem firmware fault must not take the application processor down.
+  // Change only this owned MSS; keep helpers and the lease through recovery.
+  old_modem_recovery=Read(modem+"/recovery");
+  if(old_modem_recovery=="disabled") {
+    modem_recovery_changed=true;
+    if(!Write(modem+"/recovery","enabled")||Read(modem+"/recovery")!="enabled")
+      throw std::runtime_error("Cannot enable isolated modem crash recovery");
+  }else if(old_modem_recovery!="enabled") {
+    throw std::runtime_error("Modem crash-recovery control is unavailable");
+  }
+  Log("MSS isolated crash recovery is enabled");
   // Own the modem before the start request: even a partial start needs a
   // controlled stop before any helper or read-only firmware mount is freed.
   modem_owned=true;
@@ -446,15 +460,37 @@ void Session::Stop() {
     try{Bytes payload;Tlv(payload,1,Words({handle}));wds->Call(0x21,payload,5);}catch(const std::exception &e){fprintf(stderr,"Stop data: %s\n",e.what());}
     handle=0;
   }
+  // Stop RF activity while QMI still works, before removing the IPA link or
+  // requesting remoteproc shutdown. Cancellation must not skip this request.
+  if(dms&&Read(modem+"/state")=="running") {
+    try {
+      Bytes low_power;Tlv(low_power,1,{1});
+      dms->Call(0x2e,low_power,5);
+      Log("DMS entered low-power mode before MSS shutdown");
+    }catch(const std::exception &e){Log(std::string("DMS low-power request: ")+e.what());}
+  }
+  dms.reset();
   RestoreDns();
   if(link_owned){Ip({"link","del",kInterface},false);link_owned=false;}
   wds.reset();wda.reset();dpm.reset();nas.reset();
   if(modem_owned) {
-    if(Read(modem+"/state")!="offline")Write(modem+"/state","stop");
+    if(Read(modem+"/state")!="offline"&&!Write(modem+"/state","stop"))
+      Log("MSS stop request failed; waiting for verified offline state");
     for(int i=0;i<200&&Read(modem+"/state")!="offline";++i)
       std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    if(Read(modem+"/state")!="offline")throw std::runtime_error("Modem shutdown failed. Reboot recovery before flashing");
+    if(Read(modem+"/state")!="offline")
+      throw std::runtime_error("Modem shutdown failed (state="+Read(modem+"/state")+"). Reboot recovery before flashing");
     modem_owned=false;
+  }
+  if(modem_recovery_changed) {
+    if(Read(modem+"/state")!="offline")
+      throw std::runtime_error("MSS changed state during shutdown");
+    // A refused enable may have left the original policy intact. Once MSS is
+    // offline, a policy-restore failure alone must not block reboot or flashing.
+    if(Read(modem+"/recovery")!=old_modem_recovery &&
+       (!Write(modem+"/recovery",old_modem_recovery)||Read(modem+"/recovery")!=old_modem_recovery))
+      Log("MSS is offline; could not restore its previous recovery policy");
+    modem_recovery_changed=false;
   }
   StopChild(tftp);StopChild(rmtfs);
   if(firmware_path_changed) {
@@ -497,8 +533,8 @@ void Session::ConnectData(const std::string &apn,int subscription) {
     }
   }
   if(!found)throw std::runtime_error("Modem QMI data services unavailable");
-  QmiClient dms(Find(endpoints,2,nase.node));
-  Bytes online;Tlv(online,1,{0});dms.Call(0x2e,online,12,&cancel);
+  dms=std::make_unique<QmiClient>(Find(endpoints,2,nase.node));
+  Bytes online;Tlv(online,1,{0});dms->Call(0x2e,online,12,&cancel);
   Log("DMS online request succeeded");
   nas=std::make_unique<QmiClient>(nase);
   wds=std::make_unique<QmiClient>(Find(endpoints,1,nase.node));

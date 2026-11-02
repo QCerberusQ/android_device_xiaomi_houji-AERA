@@ -1,10 +1,24 @@
 #!/system/bin/sh
 . /system/bin/aera-houji-common.sh
 
+# Give the UI handoff time to finish; only the optional init worker sleeps.
+[ "${1:-}" != --late ] || sleep 3
 require_data
+adsp=
+for node in /sys/class/remoteproc/remoteproc*; do
+    [ -r "$node/name" ] || continue
+    case "$(cat "$node/name")" in
+        *remoteproc-adsp|adsp)
+            [ -z "$adsp" ] || fail 'More than one ADSP remote processor.'
+            adsp=$node
+            ;;
+    esac
+done
+[ -n "$adsp" ] || fail 'No ADSP remote processor.'
+# The essential init sequence already boots ADSP. Observe it; never restart it.
 for attempt in $(seq 1 150); do
-    [ "$(getprop vendor.houji.adsp.ready)" = 1 ] && break
-    [ "$attempt" != 150 ] || fail 'Early ADSP initialization did not finish.'
+    [ "$(cat "$adsp/state")" = running ] && [ -e /sys/class/power_supply/battery ] && break
+    [ "$attempt" != 150 ] || fail 'Essential ADSP or battery is not ready; skipping optional audio.'
     sleep 0.1
 done
 if [ -f /tmp/aera-audio-primary-opened ] &&

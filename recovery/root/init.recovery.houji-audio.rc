@@ -1,5 +1,5 @@
-# Bootstrap off the UI thread once the existing userdata/module path has finished.
-on property:post.decrypt.modules=true && property:vendor.houji.adsp.ready=1 && property:hwservicemanager.ready=true && property:servicemanager.ready=true
+# Optional audio runs after userdata/module staging, outside the init action.
+on property:post.decrypt.modules=true && property:hwservicemanager.ready=true && property:servicemanager.ready=true
     start aera-houji-audio-bootstrap
 
 service aera-houji-adsp /system/bin/sh /system/bin/aera-houji-adsp.sh
@@ -11,10 +11,11 @@ service aera-houji-adsp /system/bin/sh /system/bin/aera-houji-adsp.sh
     seclabel u:r:recovery:s0
     stdio_to_kmsg
 
-service aera-houji-audio-bootstrap /system/bin/sh /system/bin/aera_audio_bootstrap.sh
+service aera-houji-audio-bootstrap /system/bin/sh /system/bin/aera_audio_bootstrap.sh --late
     class hal
     disabled
     oneshot
+    timeout_period 120
     user root
     group root audio system media
     seclabel u:r:recovery:s0

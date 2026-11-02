@@ -5,11 +5,13 @@
 namespace aera::mobile::houji {
 struct Session {
   Fd lease;
-  std::unique_ptr<QmiClient> dpm,wda,wds,nas;
+  std::unique_ptr<QmiClient> dms,dpm,wda,wds,nas;
   std::string modem,firmware,firmware_mount,old_firmware_path,old_resolv,own_resolv,dns1,dns2;
+  std::string old_modem_recovery;
   std::array<std::string,2> old_dns;
   pid_t rmtfs=-1,tftp=-1;
   bool modem_owned=false,link_owned=false,firmware_mounted=false,dns_owned=false,firmware_path_changed=false;
+  bool modem_recovery_changed=false;
   bool old_resolv_exists=false;
   bool established=false;
   std::thread network_worker;
