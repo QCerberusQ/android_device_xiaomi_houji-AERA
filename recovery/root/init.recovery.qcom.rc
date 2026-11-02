@@ -68,12 +68,19 @@ on property:twrp.modules.loaded=true
     # Mount firmware
     mkdir /firmware
     mount vfat /dev/block/bootdevice/by-name/modem${ro.boot.slot_suffix} /firmware ro
+    # PMIC/USB need ADSP even if optional audio preparation cannot run.
+    # Wait for it before adding vendor submounts or starting vendor services.
+    wait /sys/kernel/boot_adsp/boot 5
+    write /sys/kernel/boot_adsp/boot 1
+    wait /sys/kernel/boot_adsp/ssr 5
+    write /sys/kernel/boot_adsp/ssr 1
+    wait /sys/class/power_supply/battery 5
     # Keep only this slot's Kiwi firmware visible after the existing modem unmount.
     mkdir /vendor/firmware_mnt/image/kiwi 0755 root root
     mount none /firmware/image/kiwi /vendor/firmware_mnt/image/kiwi bind
     mount none /firmware/image/kiwi /vendor/firmware_mnt/image/kiwi remount bind ro
-    # PD service locators must be available before ADSP publishes its audio PD.
-    start aera-houji-adsp
+    # Keep optional PD/audio startup disabled until boot is verified.
+    # start aera-houji-adsp
     # Start the THP userspace touch pipeline ONLY after TW_LOAD_VENDOR_MODULES has
     # loaded synaptics_tcm2.ko and the panel has registered (panel_register_mask).
     # Starting it earlier (the old `on init` trigger in
@@ -81,8 +88,6 @@ on property:twrp.modules.loaded=true
     # "panel in touch id 0 hasn't register" and exit with status 6 -> ghost touch.
     start touch_report
     start vendor.qseecomd
-
-on property:vendor.houji.adsp.ready=1
     start vendor.health-default
 
 service aera-graphics-allocator /vendor/bin/hw/vendor.qti.hardware.display.allocator-service
