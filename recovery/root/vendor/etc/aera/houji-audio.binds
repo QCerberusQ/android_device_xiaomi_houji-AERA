@@ -18,6 +18,8 @@ vendor lib64/libhfp_pal.so /vendor/lib64/libhfp_pal.so
 vendor lib64/libkaraokepal.so /vendor/lib64/libkaraokepal.so
 vendor lib64/libqtigefar.so /vendor/lib64/libqtigefar.so
 vendor lib64/hw/gyro_fusion_interface.so /vendor/lib64/gyro_fusion_interface.so
+odm lib64/libcrussp.so /odm/lib64/libcrussp.so
+odm firmware /odm/firmware
 odm etc/audio/sku_pineapple/mixer_paths_pineapple_mtp.xml /vendor/etc/mixer_paths_pineapple_mtp.xml
 odm etc/audio/sku_pineapple/mixer_paths_overlay_static.xml /vendor/etc/mixer_paths_overlay_static.xml
 odm etc/audio/sku_pineapple/mixer_paths_overlay_dynamic.xml /vendor/etc/mixer_paths_overlay_dynamic.xml

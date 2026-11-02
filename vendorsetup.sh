@@ -103,9 +103,9 @@ if [ "$1" = "$FDEVICE" -o "$AERA_BUILD_DEVICE" = "$FDEVICE" ]; then
 	# -----------------------------------------------------------------------
 	export AERA_ALLOW_EARLY_SETTINGS_LOAD=1
 	export AERA_ENABLE_APP_MANAGER=1
+	export AERA_ENABLE_MOBILE_DATA=1
 	export AERA_DELETE_AROMAFM=1
 	export AERA_DELETE_INITD_ADDON=1
-	export AERA_ENABLE_MOBILE_DATA=1
 
 else
 	if [ -z "$AERA_BUILD_DEVICE" -a -z "$BASH_SOURCE" ]; then

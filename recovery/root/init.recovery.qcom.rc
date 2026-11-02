@@ -72,13 +72,8 @@ on property:twrp.modules.loaded=true
     mkdir /vendor/firmware_mnt/image/kiwi 0755 root root
     mount none /firmware/image/kiwi /vendor/firmware_mnt/image/kiwi bind
     mount none /firmware/image/kiwi /vendor/firmware_mnt/image/kiwi remount bind ro
-    # Load ADSP firmware for PMIC
-    wait /sys/kernel/boot_adsp/boot
-    write /sys/kernel/boot_adsp/boot 1
-    # This make USB-OTG work
-    wait /sys/kernel/boot_adsp/ssr
-    write /sys/kernel/boot_adsp/ssr 1
-    wait /sys/class/power_supply/battery
+    # PD service locators must be available before ADSP publishes its audio PD.
+    start aera-houji-adsp
     # Start the THP userspace touch pipeline ONLY after TW_LOAD_VENDOR_MODULES has
     # loaded synaptics_tcm2.ko and the panel has registered (panel_register_mask).
     # Starting it earlier (the old `on init` trigger in
@@ -86,6 +81,8 @@ on property:twrp.modules.loaded=true
     # "panel in touch id 0 hasn't register" and exit with status 6 -> ghost touch.
     start touch_report
     start vendor.qseecomd
+
+on property:vendor.houji.adsp.ready=1
     start vendor.health-default
 
 service aera-graphics-allocator /vendor/bin/hw/vendor.qti.hardware.display.allocator-service

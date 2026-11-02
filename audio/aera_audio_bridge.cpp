@@ -239,7 +239,7 @@ pid_t StartPlayer(const std::string& fifo) {
   if (child != 0) return child;
   prctl(PR_SET_PDEATHSIG, SIGTERM, 0, 0, 0);
   setenv("LD_LIBRARY_PATH",
-         "/vendor/aera-stock-lib64:/vendor/aera-stock-odm-lib64:"
+         "/vendor/aera-audio-abi:/vendor/aera-stock-lib64:/vendor/aera-stock-odm-lib64:"
          "/vendor/aera-stock-system-lib64:/vendor/lib64:/system/lib64", 1);
   setenv("ANDROID_ROOT", "/system", 1);
   setenv("ANDROID_DATA", "/data", 1);
@@ -287,7 +287,18 @@ void StopPlayer(pid_t child) {
   while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
 }
 
-void ServeClient(int client) {
+// GStreamer's base sink supplies the playback clock. Keep its PCM connection
+// alive when the audio HAL fails so video rendering can continue silently.
+void DrainPcm(int client) {
+  std::array<uint8_t, 8192> buffer{};
+  while (!g_stop) {
+    const ssize_t count = read(client, buffer.data(), buffer.size());
+    if (count > 0 || (count < 0 && errno == EINTR)) continue;
+    break;
+  }
+}
+
+void ServeClient(int client, bool backend_available) {
   ucred credentials{};
   socklen_t credentials_size = sizeof(credentials);
   if (getsockopt(client, SOL_SOCKET, SO_PEERCRED, &credentials,
@@ -304,19 +315,28 @@ void ServeClient(int client) {
     return;
   }
 
+  if (!backend_available) {
+    DrainPcm(client);
+    return;
+  }
   const std::string fifo = "/tmp/aera-browser-audio-" +
                            std::to_string(static_cast<long long>(getpid()));
   unlink(fifo.c_str());
-  if (mkfifo(fifo.c_str(), 0600) != 0) return;
+  if (mkfifo(fifo.c_str(), 0600) != 0) {
+    DrainPcm(client);
+    return;
+  }
   const pid_t player = StartPlayer(fifo);
   if (player < 0) {
     unlink(fifo.c_str());
+    DrainPcm(client);
     return;
   }
   const int output = OpenPlayerPipe(fifo, player);
   if (output < 0) {
     StopPlayer(player);
     unlink(fifo.c_str());
+    DrainPcm(client);
     return;
   }
   bool good = true;
@@ -350,6 +370,10 @@ void ServeClient(int client) {
   close(output);
   StopPlayer(player);
   unlink(fifo.c_str());
+  if (!good) {
+    fprintf(stderr, "AERA audio: PCM output failed; continuing video silently\n");
+    DrainPcm(client);
+  }
 }
 
 int RunPlayer(const char* fifo) {
@@ -469,10 +493,9 @@ int main(int argc, char** argv) {
     close(server);
     return 70;
   }
-  if (!StartBackend()) {
-    fprintf(stderr, "AERA audio: stock audio backend failed to start\n");
-    close(server);
-    return 69;
+  const bool backend_available = StartBackend();
+  if (!backend_available) {
+    fprintf(stderr, "AERA audio: stock backend unavailable; using silent PCM fallback\n");
   }
   fprintf(stderr, "AERA audio: browser PCM bridge ready\n");
   while (!g_stop) {
@@ -481,7 +504,7 @@ int main(int argc, char** argv) {
       if (errno == EINTR) continue;
       break;
     }
-    ServeClient(client);
+    ServeClient(client, backend_available);
     close(client);
   }
   close(server);

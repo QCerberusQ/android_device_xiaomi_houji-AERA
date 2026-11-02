@@ -1,6 +1,15 @@
 # Bootstrap off the UI thread once the existing userdata/module path has finished.
-on property:post.decrypt.modules=true && property:hwservicemanager.ready=true && property:servicemanager.ready=true
+on property:post.decrypt.modules=true && property:vendor.houji.adsp.ready=1 && property:hwservicemanager.ready=true && property:servicemanager.ready=true
     start aera-houji-audio-bootstrap
+
+service aera-houji-adsp /system/bin/sh /system/bin/aera-houji-adsp.sh
+    class core
+    disabled
+    oneshot
+    user root
+    group root system
+    seclabel u:r:recovery:s0
+    stdio_to_kmsg
 
 service aera-houji-audio-bootstrap /system/bin/sh /system/bin/aera_audio_bootstrap.sh
     class hal
@@ -11,12 +20,13 @@ service aera-houji-audio-bootstrap /system/bin/sh /system/bin/aera_audio_bootstr
     seclabel u:r:recovery:s0
     stdio_to_kmsg
 
-service aera-houji-pd-mapper /system/bin/sh /system/bin/aera-houji-stock-service.sh pd-mapper
+service aera-houji-pd-mapper /system/bin/aera-houji-pd-mapper
     class hal
     disabled
     oneshot
     user system
     group system
+    setenv LD_LIBRARY_PATH /system/lib64/aera-pdmapper:/system/lib64
     seclabel u:r:recovery:s0
     stdio_to_kmsg
 
@@ -49,6 +59,7 @@ service aera-houji-audio-hal /system/bin/sh /system/bin/aera-houji-stock-service
     capabilities BLOCK_SUSPEND SYS_NICE
     socket audio_holder_socket_0 seqpacket 0666 system system
     socket audio_us_socket_0 seqpacket 0666 system system
+    interface android.hardware.audio@7.0::IDevicesFactory default
     interface android.hardware.audio@7.1::IDevicesFactory default
     interface android.hardware.audio.effect@7.0::IEffectsFactory default
     interface vendor.qti.hardware.AGMIPC@1.0::IAGM default

@@ -1,6 +1,16 @@
 // Copyright (C) 2026 AERA Recovery Project contributors
 // SPDX-License-Identifier: Apache-2.0
 
+cc_prebuilt_binary {
+    name: "aera-houji-pd-mapper",
+    recovery: true,
+    srcs: ["prebuilt/pd-mapper"],
+    stl: "none",
+    strip: { none: true },
+    // Its matching libraries are isolated in /system/lib64/aera-pdmapper.
+    check_elf_files: false,
+}
+
 cc_binary {
     name: "aera-audio-bridge",
     recovery: true,

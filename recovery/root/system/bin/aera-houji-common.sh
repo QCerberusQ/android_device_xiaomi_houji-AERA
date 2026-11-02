@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# Sourced by the Houji audio and native radio bootstrap scripts.
+# Sourced by the Houji ADSP and audio bootstrap scripts.
 
 PATH=/system/bin:/vendor/bin:/sbin
 export PATH
@@ -56,7 +56,7 @@ bind_ro() {
     local source target
     source=$1
     target=$2
-    [ -e "$source" ] || fail "Missing stock audio/radio asset: $source"
+    [ -e "$source" ] || fail "Missing stock audio asset: $source"
     if [ -d "$source" ]; then
         mkdir -p "$target" || fail "Cannot create $target"
     else
@@ -76,8 +76,7 @@ bind_ro() {
 prepare_stock() {
     local part system_lib
     mkdir -p "$STOCK_ROOT" || fail 'Cannot create stock runtime directory.'
-    exec 8> "$STOCK_ROOT/.prepare.lock"
-    flock -x 8 || fail 'Cannot serialize stock runtime preparation.'
+    # The caller holds .audio-lock through preparation and HAL startup.
     SLOT=$(getprop ro.boot.slot_suffix)
     case "$SLOT" in _a|_b) ;; *) fail "Invalid active slot: $SLOT" ;; esac
     for part in vendor system odm; do
@@ -94,8 +93,6 @@ prepare_stock() {
         [ -f "$part" ] || continue
         bind_ro "$part" "/vendor/firmware_mnt/image/${part##*/}"
     done
-    flock -u 8
-    exec 8>&-
 }
 
 bind_list() {
@@ -124,7 +121,7 @@ load_modules() {
         module_live "$module" && continue
         file=
         # Core Copy_Modules_To_Tmpfs retains the active ROM modules here.
-        for directory in /tmp/vendor_dlkm/lib/modules /tmp/vendor/lib/modules /tmp/system_dlkm/lib/modules; do
+        for directory in /tmp/vendor_dlkm/lib/modules /tmp/vendor/lib/modules /tmp/system_dlkm/lib/modules /tmp/post_decrypt_modules; do
             if [ -f "$directory/$module" ]; then file=$directory/$module; break; fi
         done
         [ -n "$file" ] || fail "Missing staged native module: $module"

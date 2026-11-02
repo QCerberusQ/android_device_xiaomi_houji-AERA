@@ -25,10 +25,13 @@ $(call inherit-product-if-exists, $(DEVICE_PATH)/aera_houji.mk)
 # Device-side PCM bridge and primary HAL opener; the ROM supplies the audio HAL.
 PRODUCT_PACKAGES += \
     aera-audio-bridge \
-    aera-audio-primary-opener
+    aera-audio-primary-opener \
+    aera-houji-pd-mapper
 
-# Automatic native radio startup and AERA storage-operation disconnect handling.
-PRODUCT_PACKAGES += aera-houji-radio-manager
+# AERA's native UI provider owns QMI data sessions and their storage leases.
+ifeq ($(AERA_ENABLE_MOBILE_DATA),1)
+    PRODUCT_PACKAGES += aera-cellular-provider
+endif
 
 # API
 BOARD_SHIPPING_API_LEVEL := 34

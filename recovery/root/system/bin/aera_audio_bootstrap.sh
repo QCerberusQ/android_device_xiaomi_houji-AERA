@@ -2,6 +2,16 @@
 . /system/bin/aera-houji-common.sh
 
 require_data
+for attempt in $(seq 1 150); do
+    [ "$(getprop vendor.houji.adsp.ready)" = 1 ] && break
+    [ "$attempt" != 150 ] || fail 'Early ADSP initialization did not finish.'
+    sleep 0.1
+done
+if [ -f /tmp/aera-audio-primary-opened ] &&
+   [ "$(getprop init.svc.aera-houji-audio-hal)" = running ] &&
+   [ "$(getprop init.svc.aera-audio-primary-opener)" = running ]; then
+    exit 0
+fi
 mkdir -p /mnt/aera-stock || fail 'Cannot create stock runtime directory.'
 for attempt in $(seq 1 300); do
     mkdir /mnt/aera-stock/.audio-lock 2>/dev/null && break
