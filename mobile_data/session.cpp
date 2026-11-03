@@ -438,6 +438,7 @@ void Session::StartModem() {
   modem_owned=true;
   Log("Requesting integrated MSS remoteproc startup");
   if(!Write(modem+"/state","start"))throw std::runtime_error("Cannot start the modem");
+  modem_started=true;
 }
 // Verify LTE service before using a WDS session when legacy NAS reports detached.
 void Session::Connect(const std::string &apn,int subscription) {
@@ -474,8 +475,13 @@ void Session::Stop() {
   if(link_owned){Ip({"link","del",kInterface},false);link_owned=false;}
   wds.reset();wda.reset();dpm.reset();nas.reset();
   if(modem_owned) {
-    if(Read(modem+"/state")!="offline"&&!Write(modem+"/state","stop"))
-      Log("MSS stop request failed; waiting for verified offline state");
+    // Crash recovery briefly reports offline before restarting MSS. Balance
+    // each successful start once, even in that window, before freeing helpers.
+    if(!modem_stop_requested&&(modem_started||Read(modem+"/state")!="offline")) {
+      if(!Write(modem+"/state","stop"))
+        throw std::runtime_error("MSS stop request failed; retaining modem helpers and storage lease");
+      modem_stop_requested=true;
+    }
     for(int i=0;i<200&&Read(modem+"/state")!="offline";++i)
       std::this_thread::sleep_for(std::chrono::milliseconds(50));
     if(Read(modem+"/state")!="offline")

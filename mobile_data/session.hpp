@@ -11,6 +11,7 @@ struct Session {
   std::array<std::string,2> old_dns;
   pid_t rmtfs=-1,tftp=-1;
   bool modem_owned=false,link_owned=false,firmware_mounted=false,dns_owned=false,firmware_path_changed=false;
+  bool modem_started=false,modem_stop_requested=false;
   bool modem_recovery_changed=false;
   bool old_resolv_exists=false;
   bool established=false;

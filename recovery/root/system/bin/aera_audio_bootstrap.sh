@@ -37,6 +37,20 @@ trap 'exit 1' HUP INT TERM
 
 prepare_stock
 bind_list /vendor/etc/aera/houji-audio.binds
+# Bundle the matching Houji statistics extension and its vendor dependencies.
+# Audio services already search this private directory before the active ROM.
+for library in \
+    libaudiofeaturestats.so \
+    libprotobuf-cpp-lite-21.7.so \
+    libprotobuf-cpp-full-21.7.so \
+    libqcc_sdk.so \
+    vendor.qti.hardware.qccsyshal@1.0.so \
+    vendor.qti.hardware.qccsyshal@1.1.so \
+    vendor.qti.hardware.qccsyshal@1.2.so; do
+    [ -s "/vendor/aera-audio-abi/$library" ] || fail "Missing bundled Houji audio library: $library"
+done
+bind_ro /vendor/aera-audio-abi/libaudiofeaturestats.so /vendor/lib64/libaudiofeaturestats.so
+log 'Bundled Houji audio statistics library exposed read-only.'
 load_modules /vendor/etc/aera/houji-audio.modules
 mount_ro "/dev/block/bootdevice/by-name/dsp$SLOT" /vendor/dsp ext4
 bind_ro /vendor/dsp /dsp
