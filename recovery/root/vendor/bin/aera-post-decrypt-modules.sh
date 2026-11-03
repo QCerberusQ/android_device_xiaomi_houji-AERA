@@ -1,6 +1,6 @@
 #!/system/bin/sh
 
-# Keep this list in sync with AERA_POST_DECRYPT_MODULES in BoardConfig.mk.
+# Keep this WLAN/network subset in sync with BoardConfig.mk; native AERA owns audio insertion.
 modules="rfkill.ko cfg80211.ko gsim.ko rmnet_mem.ko usb_f_gsi.ko ipam.ko cnss_nl.ko qrtr-mhi.ko qca_cld3_kiwi_v2.ko"
 stage=/tmp/post_decrypt_modules
 

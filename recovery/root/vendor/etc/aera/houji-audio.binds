@@ -1,4 +1,5 @@
 # source-partition source-relative-path recovery-target
+# backend_conf.xml is mandatory and selected/validated by aera_audio_bootstrap.sh.
 vendor lib64/hw/android.hardware.audio@7.1-impl.so /vendor/lib64/hw/android.hardware.audio@7.1-impl.so
 vendor lib64/hw/android.hardware.audio.effect@7.0-impl.so /vendor/lib64/hw/android.hardware.audio.effect@7.0-impl.so
 vendor lib64/hw/audio.primary.pineapple.so /vendor/lib64/hw/audio.primary.pineapple.so
@@ -23,7 +24,6 @@ odm etc/audio/sku_pineapple/mixer_paths_pineapple_mtp.xml /vendor/etc/mixer_path
 odm etc/audio/sku_pineapple/mixer_paths_overlay_static.xml /vendor/etc/mixer_paths_overlay_static.xml
 odm etc/audio/sku_pineapple/mixer_paths_overlay_dynamic.xml /vendor/etc/mixer_paths_overlay_dynamic.xml
 odm etc/audio/sku_pineapple/resourcemanager_pineapple_mtp.xml /vendor/etc/resourcemanager_pineapple_mtp.xml
-odm etc/backend_conf.xml /vendor/etc/backend_conf.xml
 odm etc/usecaseKvManager.xml /vendor/etc/usecaseKvManager.xml
 vendor etc/audio /vendor/etc/audio
 vendor etc/acdbdata /vendor/etc/acdbdata
@@ -31,7 +31,6 @@ odm etc/audio /odm/etc/audio
 odm etc/audio /vendor/odm/etc/audio
 odm etc/acdbdata /odm/etc/acdbdata
 odm etc/acdbdata /vendor/odm/etc/acdbdata
-odm etc/backend_conf.xml /odm/etc/backend_conf.xml
 odm etc/usecaseKvManager.xml /odm/etc/usecaseKvManager.xml
 vendor etc/card-defs.xml /vendor/etc/card-defs.xml
 vendor etc/kvh2xml.xml /vendor/etc/kvh2xml.xml

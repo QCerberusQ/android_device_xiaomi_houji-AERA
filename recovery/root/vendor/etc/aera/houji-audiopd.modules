@@ -1,0 +1,3 @@
+# FastRPC is needed before audioadsprpcd can start the audio protection domain.
+# Core dependencies are already loaded before the optional audio worker.
+frpc-adsprpc.ko

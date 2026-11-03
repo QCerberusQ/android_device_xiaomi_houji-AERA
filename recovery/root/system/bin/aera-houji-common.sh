@@ -114,20 +114,11 @@ module_live() {
     fi
 }
 
-load_modules() {
-    local module directory file
-    while read -r module; do
-        case "$module" in ''|'#'*) continue ;; esac
-        module_live "$module" && continue
-        file=
-        # Core Copy_Modules_To_Tmpfs retains the active ROM modules here.
-        for directory in /tmp/vendor_dlkm/lib/modules /tmp/vendor/lib/modules /tmp/system_dlkm/lib/modules /tmp/post_decrypt_modules; do
-            if [ -f "$directory/$module" ]; then file=$directory/$module; break; fi
-        done
-        [ -n "$file" ] || fail "Missing staged native module: $module"
-        insmod "$file" >> /tmp/recovery.log 2>&1
-        module_live "$module" || fail "Native module failed: $module; inspect dmesg."
-    done < "$1"
+require_modules() {
+    local module
+    for module in "$@"; do
+        module_live "$module" || fail "AERA module is not live: $module; inspect native loading in recovery.log and dmesg."
+    done
 }
 
 start_service() {
