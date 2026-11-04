@@ -70,7 +70,9 @@ bind_ro() {
     else
         mount -o bind "$source" "$target" || fail "Cannot bind $target"
     fi
-    mount -o remount,bind,ro "$target" || fail "Cannot protect $target read-only"
+    # Keep MS_BIND explicit without one-argument mount-table reconstruction:
+    # a filesystem-wide remount of a ramdisk source also freezes other targets.
+    busybox mount -o remount,bind,ro "$source" "$target" || fail "Cannot protect $target read-only"
 }
 
 prepare_stock() {

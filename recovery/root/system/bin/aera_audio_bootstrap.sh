@@ -20,8 +20,39 @@ backend_config_valid() {
     }
 }
 
+backend_view_readonly() {
+    local target
+    target=$(readlink -f "$1") || return 1
+    # Follow the existing directory alias and inspect the covering mount,
+    # not the flags of /odm's parent.
+    awk -v t="$target" '
+        $5 == "/" || $5 == t || index(t, $5 "/") == 1 {
+            if (length($5) > depth) {
+                depth=length($5); flags=$6; count=1
+            } else if (length($5) == depth) count++
+        }
+        END {exit !(count == 1 && flags ~ /(^|,)ro(,|$)/)}
+    ' /proc/self/mountinfo
+}
+
+verify_backend_config() {
+    local target staged staged_id
+    staged=/mnt/aera-backend/backend_conf.xml
+    backend_config_valid "$staged" || fail 'Invalid staged backend XML.'
+    backend_view_readonly "$staged" || fail 'Backend staging is not read-only.'
+    staged_id=$(stat -c '%d:%i' "$staged") || fail 'Cannot identify staged backend XML.'
+    for target in /vendor/etc/backend_conf.xml /odm/etc/backend_conf.xml; do
+        [ ! -L "$target" ] || fail "Backend XML consumer is a symlink: $target"
+        backend_config_valid "$target" || fail "Invalid backend XML consumer: $target"
+        [ "$(stat -c '%d:%i' "$target")" = "$staged_id" ] ||
+            fail "Backend XML consumer is not bound to the staged file: $target"
+        backend_view_readonly "$target" || fail "Backend XML consumer is not read-only: $target"
+    done
+    log 'Both Houji backend XML consumers verified read-only.'
+}
+
 prepare_backend_config() {
-    local source target
+    local source target runtime record contents
     source=$STOCK_ROOT/odm/etc/backend_conf.xml
     if ! backend_config_valid "$source"; then
         # Keep this ramdisk source outside both public bind targets.
@@ -30,14 +61,41 @@ prepare_backend_config() {
             fail 'No validated Houji backend_conf.xml in active ODM or the recovery bundle.'
     fi
     log "Using validated Houji backend configuration: $source"
-    mkdir -p /vendor/etc /vendor/odm/etc || fail 'Cannot create backend XML destination directories.'
-    for target in /vendor/etc/backend_conf.xml /odm/etc/backend_conf.xml; do
-        if [ ! -e "$target" ]; then
-            cp "$source" "$target" || fail "Cannot seed backend XML target: $target"
-            chmod 0644 "$target" || fail "Cannot make backend XML target readable: $target"
-        fi
-        bind_ro "$source" "$target"
+
+    # Both public targets are packaged regular XML files. Only the private
+    # staging file is created at runtime, on its own recovery tmpfs so sealing
+    # it cannot make /mnt or rootfs read-only.
+    runtime=/mnt/aera-backend
+    [ ! -L "$runtime" ] || fail 'Backend staging directory is an unexpected symlink.'
+    mkdir -p "$runtime" || fail 'Cannot create backend staging directory.'
+    [ "$(readlink -f "$runtime")" = "$runtime" ] || fail 'Unexpected backend staging path.'
+    record=$(awk -v t="$runtime" '$2 == t {print $1, $3}' /proc/mounts)
+    if [ -n "$record" ]; then
+        [ "$record" = 'aera-houji-backend tmpfs' ] || fail 'An unrelated mount covers backend staging.'
+    else
+        contents=$(ls -A "$runtime") || fail 'Cannot inspect backend staging directory.'
+        [ -z "$contents" ] || fail 'Backend staging directory contains unrelated files.'
+        mount -t tmpfs -o rw,nosuid,nodev,noexec,mode=0755,size=64k aera-houji-backend "$runtime" ||
+            fail 'Cannot mount private backend tmpfs.'
+    fi
+    if awk -v t="$runtime/" 'index($2, t) == 1 {found=1} END {exit !found}' /proc/mounts; then
+        fail 'An unrelated mount covers staged backend XML.'
+    fi
+    [ ! -L "$runtime/backend_conf.xml" ] || fail 'Staged backend XML is an unexpected symlink.'
+    if [ ! -e "$runtime/backend_conf.xml" ]; then
+        cp "$source" "$runtime/backend_conf.xml" || fail 'Cannot stage validated backend XML.'
+        chmod 0444 "$runtime/backend_conf.xml" || fail 'Cannot protect staged backend XML.'
+    fi
+    backend_config_valid "$runtime/backend_conf.xml" || fail 'Invalid staged backend XML.'
+    mount -o remount,ro "$runtime" || fail 'Cannot seal backend tmpfs read-only.'
+    backend_view_readonly "$runtime/backend_conf.xml" || fail 'Backend tmpfs is not read-only.'
+
+    for target in /vendor/etc/backend_conf.xml /vendor/odm/etc/backend_conf.xml; do
+        [ -f "$target" ] && [ ! -L "$target" ] ||
+            fail "Backend XML bind target is not a regular ramdisk file: $target"
+        bind_ro "$runtime/backend_conf.xml" "$target"
     done
+    verify_backend_config
 }
 
 # Give the UI handoff time to finish; only the optional init worker sleeps.
@@ -63,6 +121,7 @@ done
 if [ -f /tmp/aera-audio-primary-opened ] &&
    [ "$(getprop init.svc.aera-houji-audio-hal)" = running ] &&
    [ "$(getprop init.svc.aera-audio-primary-opener)" = running ]; then
+    verify_backend_config
     exit 0
 fi
 mkdir -p /mnt/aera-stock || fail 'Cannot create stock runtime directory.'
@@ -132,6 +191,7 @@ for attempt in $(seq 1 150); do
 done
 [ -e /dev/snd/controlC0 ] || fail 'No ALSA machine card after native audio module loading.'
 
+verify_backend_config
 if [ "$(getprop init.svc.aera-houji-audio-hal)" != running ]; then
     setprop ctl.stop aera-audio-primary-opener
     rm -f /tmp/aera-audio-primary-opened
