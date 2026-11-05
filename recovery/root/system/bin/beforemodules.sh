@@ -32,6 +32,6 @@ sed 's/^softdep mpam_policy mpam_policy pre: mpam_arch$/softdep mpam_policy pre:
     "$source" > "$fixed" || fail 'Cannot prepare corrected module metadata.'
 chmod 0400 "$fixed" || fail 'Cannot protect corrected module metadata.'
 mount -o bind "$fixed" "$source" || fail 'Cannot bind corrected module metadata.'
-mount -o remount,bind,ro "$source" || fail 'Cannot make the metadata bind read-only.'
+busybox mount -o remount,bind,ro "$fixed" "$source" || fail 'Cannot make the metadata bind read-only.'
 printf 'I:houji-beforemodules::Corrected the mpam_policy softdep token in a temporary read-only bind.\n' >> /tmp/recovery.log
 # Leave this mount for the native loader, which detaches vendor_dlkm afterwards.
