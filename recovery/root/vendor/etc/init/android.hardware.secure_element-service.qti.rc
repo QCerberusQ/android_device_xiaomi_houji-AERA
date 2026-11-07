@@ -1,7 +1,7 @@
 #on init
 #    start vendor.secure_element
 
-service vendor.secure_element /vendor/bin/hw/android.hardware.secure_element-service.qti
+service vendor.secure_element /system/bin/sh /vendor/bin/aera-secure-element-ready.sh
     class hal
     user root
     group nfc root
