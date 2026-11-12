@@ -1,8 +1,9 @@
 # Optional audio runs after userdata/module staging, outside the init action.
-on property:post.decrypt.modules=true && property:hwservicemanager.ready=true && property:servicemanager.ready=true
+on property:post.decrypt.modules=true
+    write /dev/kmsg "[aera-audio] post-decrypt bootstrap requested"
     start aera-houji-audio-bootstrap
 
-service aera-houji-adsp /system/bin/sh /system/bin/aera-houji-adsp.sh
+service aera-pdmapper-boot /system/bin/sh /system/bin/aera-houji-adsp.sh
     class core
     disabled
     oneshot
@@ -22,42 +23,45 @@ service aera-houji-audio-bootstrap /system/bin/sh /system/bin/aera_audio_bootstr
     stdio_to_kmsg
 
 service aera-houji-pd-mapper /system/bin/aera-houji-pd-mapper
-    class hal
+    class core
     disabled
-    oneshot
     user system
     group system
     setenv LD_LIBRARY_PATH /system/lib64/aera-pdmapper:/system/lib64
     seclabel u:r:recovery:s0
     stdio_to_kmsg
 
-service aera-houji-dspservice /system/bin/sh /system/bin/aera-houji-stock-service.sh dspservice
+service aera-dspservice /vendor/bin/aera-dspservice
     class hal
     disabled
-    oneshot
     user system
     group system wakelock 2908
     capabilities BLOCK_SUSPEND
+    setenv LD_LIBRARY_PATH /vendor/aera-audio-abi:/vendor/aera-stock-lib64:/vendor/aera-stock-odm-lib64:/vendor/aera-stock-system-lib64:/vendor/lib64:/system/lib64
     interface vendor.qti.hardware.dsp@1.0::IDspService dspservice
     seclabel u:r:recovery:s0
     stdio_to_kmsg
 
-service aera-houji-audiopd /system/bin/sh /system/bin/aera-houji-stock-service.sh audiopd
-    class hal
+service aera-audioadsprpcd /vendor/bin/aera-audioadsprpcd audiopd
+    class main
     disabled
-    oneshot
     user media
     group media
+    setenv LD_LIBRARY_PATH /vendor/aera-audio-abi:/vendor/aera-stock-lib64:/vendor/aera-stock-odm-lib64:/vendor/aera-stock-system-lib64:/vendor/lib64:/system/lib64
     seclabel u:r:recovery:s0
     stdio_to_kmsg
 
-service aera-houji-audio-hal /system/bin/sh /system/bin/aera-houji-stock-service.sh audio-hal
+# The bootstrap starts this service only after the ALSA machine card exists.
+service aera-stock-audio-hal /vendor/bin/hw/android.hardware.audio.service
     class hal
     disabled
     oneshot
     user root
     group root audio system media
     capabilities BLOCK_SUSPEND SYS_NICE
+    setenv LD_LIBRARY_PATH /vendor/aera-audio-abi:/vendor/aera-stock-lib64:/vendor/aera-stock-odm-lib64:/vendor/aera-stock-system-lib64:/vendor/lib64:/system/lib64
+    setenv ANDROID_ROOT /system
+    setenv ANDROID_DATA /data
     socket audio_holder_socket_0 seqpacket 0666 system system
     socket audio_us_socket_0 seqpacket 0666 system system
     interface android.hardware.audio@7.0::IDevicesFactory default

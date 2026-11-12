@@ -68,19 +68,13 @@ on property:twrp.modules.loaded=true
     # Mount firmware
     mkdir /firmware
     mount vfat /dev/block/bootdevice/by-name/modem${ro.boot.slot_suffix} /firmware ro
-    # PMIC/USB need ADSP even if optional audio preparation cannot run.
-    # Wait for it before adding vendor submounts or starting vendor services.
-    wait /sys/kernel/boot_adsp/boot 5
-    write /sys/kernel/boot_adsp/boot 1
-    wait /sys/kernel/boot_adsp/ssr 5
-    write /sys/kernel/boot_adsp/ssr 1
     wait /sys/class/power_supply/battery 5
     # Keep only this slot's Kiwi firmware visible after the existing modem unmount.
     mkdir /vendor/firmware_mnt/image/kiwi 0755 root root
     mount none /firmware/image/kiwi /vendor/firmware_mnt/image/kiwi bind
     mount none /firmware/image/kiwi /vendor/firmware_mnt/image/kiwi remount bind ro
-    # Keep optional PD/audio startup disabled until boot is verified.
-    # start aera-houji-adsp
+    # Prepare the recovery-backed mapper asynchronously before requesting ADSP.
+    start aera-pdmapper-boot
     # Start the THP userspace touch pipeline ONLY after TW_LOAD_VENDOR_MODULES has
     # loaded synaptics_tcm2.ko and the panel has registered (panel_register_mask).
     # Starting it earlier (the old `on init` trigger in
@@ -89,6 +83,14 @@ on property:twrp.modules.loaded=true
     start touch_report
     start vendor.qseecomd
     start vendor.health-default
+
+# The worker holds the audio lock and verifies the mapper before publishing.
+on property:vendor.aera.pdmapper.ready=1 && property:init.svc.aera-houji-pd-mapper=running && property:init.svc.aera-pdmapper-boot=running
+    setprop vendor.aera.pdmapper.ready 0
+    write /dev/kmsg "[aera-pdmapper-boot] init requesting ADSP boot"
+    write /sys/kernel/boot_adsp/boot 1
+    wait /sys/kernel/boot_adsp/ssr 5
+    write /sys/kernel/boot_adsp/ssr 1
 
 service aera-graphics-allocator /vendor/bin/hw/vendor.qti.hardware.display.allocator-service
     class hal

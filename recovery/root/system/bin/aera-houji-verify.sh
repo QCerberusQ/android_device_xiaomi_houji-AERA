@@ -32,7 +32,7 @@ if [ -s "$source" ] && [ -n "$source_id" ] && [ "$source_id" = "$target_id" ]; t
 else
     bad 'Bundled audio statistics library is missing or not bound.'
 fi
-audio_pid=$(getprop init.svc_debug_pid.aera-houji-audio-hal)
+audio_pid=$(getprop init.svc_debug_pid.aera-stock-audio-hal)
 case "$audio_pid" in
     ''|0|*[!0-9]*) bad 'Audio HAL PID is unavailable.' ;;
     *)

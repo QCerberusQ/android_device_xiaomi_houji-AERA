@@ -119,7 +119,7 @@ for attempt in $(seq 1 150); do
     sleep 0.1
 done
 if [ -f /tmp/aera-audio-primary-opened ] &&
-   [ "$(getprop init.svc.aera-houji-audio-hal)" = running ] &&
+   [ "$(getprop init.svc.aera-stock-audio-hal)" = running ] &&
    [ "$(getprop init.svc.aera-audio-primary-opener)" = running ]; then
     verify_backend_config
     exit 0
@@ -154,8 +154,13 @@ for attempt in $(seq 1 50); do
     sleep 0.1
 done
 [ -c /dev/adsprpc-smd ] || fail 'FastRPC /dev/adsprpc-smd is unavailable; cannot start AudioPD.'
-start_service aera-houji-dspservice
-start_service aera-houji-audiopd
+for daemon in dspservice audioadsprpcd; do
+    [ -x "$STOCK_ROOT/vendor/bin/$daemon" ] || fail "Missing active-ROM audio daemon: $daemon"
+done
+bind_ro "$STOCK_ROOT/vendor/bin/dspservice" /vendor/bin/aera-dspservice
+bind_ro "$STOCK_ROOT/vendor/bin/audioadsprpcd" /vendor/bin/aera-audioadsprpcd
+start_service aera-dspservice
+start_service aera-audioadsprpcd
 log 'PD mapper, DSP service and AudioPD processes started.'
 
 prepare_backend_config
@@ -192,11 +197,20 @@ done
 [ -e /dev/snd/controlC0 ] || fail 'No ALSA machine card after native audio module loading.'
 
 verify_backend_config
-if [ "$(getprop init.svc.aera-houji-audio-hal)" != running ]; then
+# Keep Peridot's direct init service path while supporting Houji's _64 HAL.
+if [ -x "$STOCK_ROOT/vendor/bin/hw/android.hardware.audio.service" ]; then
+    hal=$STOCK_ROOT/vendor/bin/hw/android.hardware.audio.service
+elif [ -x "$STOCK_ROOT/vendor/bin/hw/android.hardware.audio.service_64" ]; then
+    hal=$STOCK_ROOT/vendor/bin/hw/android.hardware.audio.service_64
+else
+    fail 'No supported active-ROM Qualcomm audio HAL executable.'
+fi
+bind_ro "$hal" /vendor/bin/hw/android.hardware.audio.service
+if [ "$(getprop init.svc.aera-stock-audio-hal)" != running ]; then
     setprop ctl.stop aera-audio-primary-opener
     rm -f /tmp/aera-audio-primary-opened
 fi
-start_service aera-houji-audio-hal
+start_service aera-stock-audio-hal
 start_service aera-audio-primary-opener
 for attempt in $(seq 1 100); do
     [ -f /tmp/aera-audio-primary-opened ] && break
