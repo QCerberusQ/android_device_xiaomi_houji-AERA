@@ -56,6 +56,8 @@ on fs
     mkdir /mnt/vendor/persist 0775 shell system
     mkdir /tmp/persist 0775 shell system
     mount none /tmp/persist /mnt/vendor/persist bind rec
+    mkdir /tmp/persist/data 0700 system system
+    mkdir /tmp/persist/data/pfm 0755 system system
     # Read factory WLAN calibration through its own mount after bootdevice exists.
     mkdir /mnt/aera-wlan-persist 0755 root root
     mount ext4 /dev/block/bootdevice/by-name/persist /mnt/aera-wlan-persist ro nosuid nodev noatime noload

@@ -1,7 +1,7 @@
 #on init
 #    start vendor.weaver_nxp
 
-service vendor.weaver_nxp /vendor/bin/hw/android.hardware.weaver-service.nxp-qti
+service vendor.weaver_nxp /system/bin/sh /vendor/bin/aera-weaver-ready.sh
     class hal
     user root
     group root drmrpc

@@ -1,17 +1,12 @@
 #!/system/bin/sh
 
 # Keep this WLAN/network subset in sync with BoardConfig.mk; native AERA owns audio insertion.
+# Only native AERA publishes post.decrypt.modules after its full module pass.
 modules="rfkill.ko cfg80211.ko gsim.ko rmnet_mem.ko usb_f_gsi.ko ipam.ko cnss_nl.ko qrtr-mhi.ko qca_cld3_kiwi_v2.ko"
 stage=/tmp/post_decrypt_modules
 
-publish() {
-    [ "$(getprop post.decrypt.modules)" = "$1" ] && return 0
-    setprop post.decrypt.modules "$1" && [ "$(getprop post.decrypt.modules)" = "$1" ]
-}
-
 fail() {
     printf 'E:aera-post-decrypt-modules::%s\n' "$*" >> /tmp/recovery.log
-    publish false
     exit 1
 }
 
@@ -61,5 +56,4 @@ for module in $modules; do
 done
 
 data_ready || fail 'Primary userdata became unavailable during module loading.'
-publish true || fail 'Unable to publish module readiness.'
 printf 'I:aera-post-decrypt-modules::All requested modules are live and primary userdata is accessible.\n' >> /tmp/recovery.log
