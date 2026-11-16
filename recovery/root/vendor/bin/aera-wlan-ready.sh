@@ -75,8 +75,8 @@ if [ ! -d /sys/class/net/wlan0 ]; then
     # Pin the directory across public /vendor mount changes; verify the object
     # actually opened before any write, including a race at directory open.
     exec 9< "$mac_parent" || fail "Cannot pin the recovery Kiwi MAC directory."
-    mac_dir=/proc/self/fd/9
-    mac_fs=$(stat -f -c %t "$mac_dir") || fail "Cannot verify the pinned MAC filesystem."
+    mac_dir=/proc/$$/fd/9
+    mac_fs=$(stat -f -c %t "$mac_dir" 2>>/tmp/recovery.log) || fail "Cannot verify the pinned MAC filesystem."
     case "$mac_fs" in
         1021994|858458f6) ;; # TMPFS_MAGIC / RAMFS_MAGIC
         *) fail "The pinned Kiwi MAC directory is not recovery RAM." ;;
