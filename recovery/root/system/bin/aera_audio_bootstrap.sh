@@ -1,5 +1,9 @@
 #!/system/bin/sh
 . /system/bin/aera-houji-common.sh
+# HOS-01: prevent direct callers from preparing the optional audio backend.
+log 'HOS-01: optional audio bootstrap suppressed.'
+exit 1
+
 # Public stock/RFSA parents must be searchable by system/media audio children.
 umask 022
 

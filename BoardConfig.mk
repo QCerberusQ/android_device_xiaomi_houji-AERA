@@ -218,6 +218,8 @@ AERA_LOAD_VENDOR_MODULES := "drm_display_helper.ko qseecom_proxy.ko smcinvoke_dl
 # Recovery lifecycle policy: defer WLAN/network leaves until primary data is accessible.
 # Native audio dependencies follow RFkill/WLAN; the audio worker only checks readiness.
 AERA_POST_DECRYPT_MODULES := "rfkill.ko cfg80211.ko gsim.ko rmnet_mem.ko usb_f_gsi.ko ipam.ko cnss_nl.ko qrtr-mhi.ko qca_cld3_kiwi_v2.ko audpkt_ion_dlkm.ko audio_pkt_dlkm.ko q6_dlkm.ko pinctrl_lpi_dlkm.ko stub_dlkm.ko audio_prm_dlkm.ko wcd_core_dlkm.ko typec_analog_acc_dlkm.ko lpass_cdc_dlkm.ko swr_dlkm.ko wcd9xxx_dlkm.ko lpass_cdc_tx_macro_dlkm.ko fsa4480-i2c.ko mbhc_dlkm.ko wcd937x_dlkm.ko wcd9378_dlkm.ko wcd939x_dlkm.ko swr_ctrl_dlkm.ko lpass_cdc_rx_macro_dlkm.ko wsa883x_dlkm.ko wsa884x_dlkm.ko slimbus.ko btpower.ko bt_fm_slim.ko cs35l41_dlkm.ko swr_haptics_dlkm.ko machine_dlkm.ko"
+# HOS-01: limit native post-decrypt insertion to the WLAN/network pass.
+AERA_POST_DECRYPT_MODULES := "rfkill.ko cfg80211.ko gsim.ko rmnet_mem.ko usb_f_gsi.ko ipam.ko cnss_nl.ko qrtr-mhi.ko qca_cld3_kiwi_v2.ko"
 AERA_LOAD_VENDOR_MODULES_EXCLUDE_GKI := true
 
 # Wi-Fi
