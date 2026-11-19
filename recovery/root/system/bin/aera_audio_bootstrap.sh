@@ -1,11 +1,65 @@
 #!/system/bin/sh
 . /system/bin/aera-houji-common.sh
-# HOS-01: prevent direct callers from preparing the optional audio backend.
-log 'HOS-01: optional audio bootstrap suppressed.'
-exit 1
-
 # Public stock/RFSA parents must be searchable by system/media audio children.
 umask 022
+
+audio_log() {
+    log "$*"
+    printf '<6>[aera-audio] %s\n' "$*" > /dev/kmsg
+}
+
+require_audio_ready() {
+    [ "$(getprop twrp.modules.loaded)" = true ] || fail 'Core module staging is incomplete.'
+    [ "$(getprop post.decrypt.modules)" = true ] || fail 'Native network module pass is incomplete.'
+    [ "$(getprop vendor.sys.listeners.registered)" = true ] || fail 'QSEE listeners are not ready.'
+    [ "$(getprop crypto.ready)" = 1 ] || fail 'Crypto services are not ready.'
+    [ "$(getprop vendor.houji.adsp.ready)" = 1 ] || fail 'Essential ADSP preparation is incomplete.'
+    case "$(getprop ro.aera.fastbootd):$(getprop sys.usb.config.aera_fastbootd)" in
+        1:*|true:*|*:1|*:true) fail 'fastbootd is active.' ;;
+    esac
+    case "$(getprop ro.crypto.state):$(getprop twrp.decrypt.done)" in
+        unencrypted:*|*:true) ;;
+        *) fail 'Primary user decryption is incomplete.' ;;
+    esac
+}
+
+require_audio_adsp() {
+    [ "$(cat "$adsp/state")" = running ] && [ -e /sys/class/power_supply/battery ] ||
+        fail 'ADSP or battery readiness changed during delayed audio initialization.'
+}
+
+load_audio_modules() {
+    local module source part staged
+    SLOT=$(getprop ro.boot.slot_suffix)
+    case "$SLOT" in _a|_b) ;; *) fail "Invalid active slot: $SLOT" ;; esac
+    [ -s /vendor/etc/aera/houji-post-decrypt-audio.modules ] &&
+        [ -r /vendor/etc/aera/houji-post-decrypt-audio.modules ] || fail 'Delayed audio module manifest is unavailable.'
+    mkdir -p /tmp/post_decrypt_modules || fail 'Cannot create the audio module staging directory.'
+    for part in vendor_dlkm system_dlkm; do
+        mount_ro "/dev/block/mapper/$part$SLOT" "$STOCK_ROOT/$part" erofs
+    done
+    while read -r module; do
+        case "$module" in ''|'#'*) continue ;; esac
+        require_audio_ready
+        require_audio_adsp
+        module_live "$module" && continue
+        source=
+        for part in vendor_dlkm system_dlkm; do
+            source=$(find "$STOCK_ROOT/$part/lib/modules" -type f -name "$module" 2>> /tmp/recovery.log | head -n 1)
+            [ -z "$source" ] || break
+        done
+        [ -f "$source" ] || fail "Installed audio module is unavailable: $module"
+        staged=/tmp/post_decrypt_modules/$module
+        cp "$source" "$staged" || fail "Cannot stage installed audio module: $module"
+        chmod 0700 "$staged" || fail "Cannot protect staged audio module: $module"
+        audio_log "Loading delayed audio module: $module ($source)"
+        if ! insmod "$staged" 2>> /tmp/recovery.log; then
+            module_live "$module" || fail "Delayed audio module failed: $module"
+        fi
+        module_live "$module" || fail "Delayed audio module is not live: $module"
+        audio_log "Delayed audio module is live: $module"
+    done < /vendor/etc/aera/houji-post-decrypt-audio.modules
+}
 
 backend_config_valid() {
     local digest
@@ -102,9 +156,8 @@ prepare_backend_config() {
     verify_backend_config
 }
 
-# Give the UI handoff time to finish; only the optional init worker sleeps.
-[ "${1:-}" != --late ] || sleep 3
-require_data
+# Init and direct/UI callers share the same primary-user gate.
+require_audio_ready
 adsp=
 for node in /sys/class/remoteproc/remoteproc*; do
     [ -r "$node/name" ] || continue
@@ -125,6 +178,7 @@ done
 if [ -f /tmp/aera-audio-primary-opened ] &&
    [ "$(getprop init.svc.aera-stock-audio-hal)" = running ] &&
    [ "$(getprop init.svc.aera-audio-primary-opener)" = running ]; then
+    require_data
     verify_backend_config
     exit 0
 fi
@@ -136,6 +190,17 @@ for attempt in $(seq 1 300); do
 done
 trap 'rmdir /mnt/aera-stock/.audio-lock' EXIT
 trap 'exit 1' HUP INT TERM
+
+audio_log 'Primary userdata and native networking are ready; waiting 15 seconds before audio.'
+sleep 15 || fail 'Audio settle wait was interrupted.'
+require_audio_ready
+require_audio_adsp
+require_data
+! awk '($2 == "/vendor" || $2 == "/odm" || $2 == "/system") &&
+       ($3 == "erofs" || $3 == "ext4") {found=1}
+       END {exit !found}' /proc/mounts || fail 'Temporary ROM mounts still cover the audio runtime.'
+audio_log 'Audio settle wait completed; loading installed optional audio modules.'
+load_audio_modules
 
 prepare_stock
 # GPR uses AudioPD notifications; PAL XML must not gate its prerequisites.
@@ -183,7 +248,7 @@ for library in \
 done
 bind_ro /vendor/aera-audio-abi/libaudiofeaturestats.so /vendor/lib64/libaudiofeaturestats.so
 log 'Bundled Houji audio statistics library exposed read-only.'
-# AERA_POST_DECRYPT_MODULES owns the speaker dependency pass.
+# The delayed worker owns the speaker dependency pass.
 require_modules audio_pkt_dlkm.ko q6_dlkm.ko pinctrl_lpi_dlkm.ko stub_dlkm.ko machine_dlkm.ko cs35l41_dlkm.ko
 
 # PAL reads factory speaker calibration here. Expose only the audio directory
@@ -198,7 +263,7 @@ for attempt in $(seq 1 150); do
     [ -e /dev/snd/controlC0 ] && break
     sleep 0.1
 done
-[ -e /dev/snd/controlC0 ] || fail 'No ALSA machine card after native audio module loading.'
+[ -e /dev/snd/controlC0 ] || fail 'No ALSA machine card after delayed audio module loading.'
 
 verify_backend_config
 # Keep Peridot's direct init service path while supporting Houji's _64 HAL.
