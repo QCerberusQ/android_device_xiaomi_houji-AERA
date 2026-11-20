@@ -19,6 +19,8 @@ require_audio_ready() {
     esac
     case "$(getprop ro.crypto.state):$(getprop twrp.decrypt.done)" in
         unencrypted:*|*:true) ;;
+        # DFE may omit crypto properties; verify actual primary-user access.
+        :*) require_data ;;
         *) fail 'Primary user decryption is incomplete.' ;;
     esac
 }

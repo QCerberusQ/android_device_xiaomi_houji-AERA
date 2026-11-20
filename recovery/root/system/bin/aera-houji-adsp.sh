@@ -53,14 +53,28 @@ for library in libc++.so libjson.so libbase.so libcutils.so libutils.so \
     [ -r "$LIBDIR/$library" ] || fail "Missing private mapper library: $library"
 done
 [ -w /sys/kernel/boot_adsp/boot ] || fail 'ADSP boot node is unavailable.'
-mount_ro "/dev/block/bootdevice/by-name/modem$SLOT" /firmware vfat
-locators=0
-for locator in /firmware/image/*.jsn; do
-    [ -f "$locator" ] || continue
-    bind_ro "$locator" "/vendor/firmware_mnt/image/${locator##*/}"
-    locators=$((locators + 1))
+# Process_Fstab can cover RAM targets after the initial view check.
+for attempt in $(seq 1 100); do
+    if (
+        # The parent owns the audio lock and mapper cleanup.
+        trap - EXIT
+        check_recovery_view || exit 1
+        mount_ro "/dev/block/bootdevice/by-name/modem$SLOT" /firmware vfat
+        locators=0
+        for locator in /firmware/image/*.jsn; do
+            [ -f "$locator" ] || continue
+            bind_ro "$locator" "/vendor/firmware_mnt/image/${locator##*/}"
+            locators=$((locators + 1))
+        done
+        [ "$locators" -gt 0 ] || fail 'Active-slot firmware has no PD service locators.'
+        check_recovery_view
+    ); then
+        break
+    fi
+    [ "$attempt" != 100 ] || fail 'PD service locators could not be exposed in recovery view.'
+    log 'PD locator exposure failed; waiting before retry.'
+    sleep 0.1
 done
-[ "$locators" -gt 0 ] || fail 'Active-slot firmware has no PD service locators.'
 
 adsp=
 for node in /sys/class/remoteproc/remoteproc*; do

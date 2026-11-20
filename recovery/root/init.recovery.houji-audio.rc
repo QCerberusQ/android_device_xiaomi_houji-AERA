@@ -3,8 +3,8 @@ on property:twrp.decrypt.done=true && property:post.decrypt.modules=true && prop
     write /dev/kmsg "[aera-audio] primary userdata unlocked; scheduling delayed audio"
     start aera-houji-audio-bootstrap
 
-on property:ro.crypto.state=unencrypted && property:post.decrypt.modules=true && property:crypto.ready=1 && property:vendor.sys.listeners.registered=true && property:vendor.houji.adsp.ready=1
-    write /dev/kmsg "[aera-audio] unencrypted userdata ready; scheduling delayed audio"
+on property:post.decrypt.modules=true && property:crypto.ready=1 && property:vendor.sys.listeners.registered=true && property:vendor.houji.adsp.ready=1
+    write /dev/kmsg "[aera-audio] native networking ready; checking userdata before delayed audio"
     start aera-houji-audio-bootstrap
 
 service aera-pdmapper-boot /system/bin/sh /system/bin/aera-houji-adsp.sh
