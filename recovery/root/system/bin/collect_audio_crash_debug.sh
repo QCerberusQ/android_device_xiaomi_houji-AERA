@@ -141,6 +141,11 @@ for candidate in /tmp/post_decrypt_modules/swr_haptics_dlkm.ko \
 done
 printf 'visible haptics bytes source=%s\n' "${haptics_source:-unavailable}" >> "$out/capture_status.txt"
 capture executable_hashes.txt sha256sum "$0" /system/bin/recovery /system/bin/sh /system/bin/stat /vendor/bin/aera-wlan-ready.sh
+capture crash_dump_paths.txt ls -l /system/bin/crash_dump64 /system/bin/linker64
+capture crash_dump_hashes.txt sha256sum /system/bin/crash_dump64 /system/bin/linker64
+capture audio_runtime_hashes.txt sha256sum /system/aera-audio-vendor/lib64/hw/audio.primary.pineapple.so \
+    /system/aera-audio-vendor/lib64/libpalclient.so /system/aera-audio-vendor/lib64/libar-pal.so \
+    /system/aera-audio-vendor/lib64/libagm.so
 
 for node in /sys/class/remoteproc/remoteproc*; do
     [ -d "$node" ] || continue
@@ -152,7 +157,8 @@ for process in recovery vold qseecomd keystore2 \
     android.hardware.security.keymint-service-qti android.hardware.security.keymint-service.strongbox-nxp \
     android.hardware.weaver-service.nxp-qti android.hardware.gatekeeper-service-qti \
     aera-houji-pd-mapper aera-dspservice aera-audioadsprpcd dspservice audioadsprpcd \
-    android.hardware.audio.service android.hardware.audio.service_64 aera-audio-primary-opener aera-audio-bridge; do
+    android.hardware.audio.service android.hardware.audio.service_64 aera-audio-primary-opener aera-audio-bridge \
+    aera-agm-service; do
     capture "pidof-$process.txt" pidof "$process"
     lookup_status=$status
     pids=

@@ -25,14 +25,14 @@ cc_binary {
 }
 
 cc_binary {
-    name: "aera-audio-primary-opener",
+    name: "aera-agm-service",
     recovery: true,
-    srcs: ["aera_audio_primary_opener.cpp"],
+    srcs: ["aera_agm_service.cpp"],
+    header_libs: ["libhardware_headers"],
     shared_libs: [
-        "android.hardware.audio@7.0",
-        "android.hardware.audio@7.1",
+        "libdl",
         "libhidlbase",
-        "libutils",
+        "liblog",
     ],
     cpp_std: "c++17",
     cflags: [

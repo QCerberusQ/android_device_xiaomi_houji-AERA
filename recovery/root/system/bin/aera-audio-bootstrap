@@ -1,0 +1,168 @@
+#!/system/bin/sh
+# Init owns optional audio startup; shared ADSP/mapper preparation stays intact.
+. /system/bin/aera-houji-common.sh
+STOCK_ROOT=/mnt/aera-audio-stock
+umask 022
+
+READY=vendor.houji.audio.ready
+BACKEND_SHA=d44a02e78bc063af96d6f599bee244852b73bacad0732cec0e0814d599b8fedd
+SUCCESS=0
+STARTED=
+
+cleanup() {
+    if [ "$SUCCESS" = 0 ]; then
+        setprop "$READY" 0
+        for service in $STARTED; do
+            setprop ctl.stop "$service"
+        done
+    fi
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+setprop "$READY" 0 || fail 'Cannot revoke old audio readiness.'
+
+require_ready() {
+    require_data
+    [ "$(getprop post.decrypt.modules)" = true ] || fail 'Native post-decrypt modules are incomplete.'
+    [ "$(getprop crypto.ready)" = 1 ] || fail 'Crypto services are incomplete.'
+    [ "$(getprop vendor.sys.listeners.registered)" = true ] || fail 'Secure listeners are incomplete.'
+    [ "$(getprop vendor.houji.adsp.ready)" = 1 ] || fail 'Essential ADSP preparation is incomplete.'
+    case "$(getprop ro.aera.fastbootd):$(getprop sys.usb.config.aera_fastbootd)" in
+        1:*|true:*|*:1|*:true) fail 'fastbootd is active.' ;;
+    esac
+}
+
+require_hardware() {
+    local node adsp attempt
+    adsp=
+    for node in /sys/class/remoteproc/remoteproc*; do
+        [ -r "$node/name" ] || continue
+        case "$(cat "$node/name")" in
+            *remoteproc-adsp|adsp)
+                [ -z "$adsp" ] || fail 'No unique ADSP remote processor.'
+                adsp=$node ;;
+        esac
+    done
+    [ -n "$adsp" ] || fail 'No unique ADSP remote processor.'
+    [ "$(cat "$adsp/state" 2>/dev/null)" = running ] || fail 'ADSP is not running.'
+    [ -e /sys/class/power_supply/battery ] || fail 'ADSP battery service is unavailable.'
+    require_modules frpc-adsprpc.ko audio_pkt_dlkm.ko q6_dlkm.ko \
+        pinctrl_lpi_dlkm.ko stub_dlkm.ko machine_dlkm.ko cs35l41_dlkm.ko
+    for attempt in $(seq 1 30); do
+        [ -c /dev/adsprpc-smd ] && break
+        sleep 0.1
+    done
+    [ -c /dev/adsprpc-smd ] || fail 'FastRPC /dev/adsprpc-smd is unavailable.'
+}
+
+backend_valid() {
+    local sum
+    [ -f "$1" ] && [ -r "$1" ] || return 1
+    sum=$(sha256sum "$1" 2>> /tmp/recovery.log) || return 1
+    [ "$(printf '%s' "$sum" | cut -d ' ' -f 1)" = "$BACKEND_SHA" ]
+}
+
+start_optional() {
+    local service attempt
+    service=$1
+    require_ready
+    require_hardware
+    if [ "$(getprop "init.svc.$service")" != running ]; then
+        setprop ctl.start "$service" || fail "Cannot start $service"
+        STARTED="$service $STARTED"
+    fi
+    for attempt in $(seq 1 50); do
+        [ "$(getprop "init.svc.$service")" = running ] && break
+        sleep 0.1
+    done
+    sleep 0.5
+    [ "$(getprop "init.svc.$service")" = running ] || fail "Service $service exited."
+}
+
+require_ready
+require_hardware
+SLOT=$(getprop ro.boot.slot_suffix)
+case "$SLOT" in _a|_b) ;; *) fail "Invalid active slot: $SLOT" ;; esac
+
+mkdir -p "$STOCK_ROOT" || fail 'Cannot create stock runtime directory.'
+
+# Only temporary ROM covers are rejected; RAM recovery aliases are permitted.
+for attempt in $(seq 1 50); do
+    if ! awk '($2 == "/vendor" || $2 == "/odm" || $2 == "/system") &&
+              ($3 == "erofs" || $3 == "ext4") {found=1}
+              END {exit !found}' /proc/mounts; then
+        break
+    fi
+    [ "$attempt" != 50 ] || fail 'Temporary ROM mounts cover the audio runtime.'
+    require_ready
+    sleep 0.1
+done
+require_ready
+require_hardware
+
+for part in vendor system odm; do
+    mount_ro "/dev/block/mapper/$part$SLOT" "$STOCK_ROOT/$part" erofs
+done
+system_lib=$STOCK_ROOT/system/system/lib64
+[ -f "$system_lib/libbinder.so" ] || system_lib=$STOCK_ROOT/system/lib64
+[ -f "$system_lib/libbinder.so" ] || fail 'Matching stock framework libraries are unavailable.'
+bind_ro "$STOCK_ROOT/vendor" /system/aera-audio-vendor
+bind_ro "$system_lib" /system/aera-audio-system-lib64
+bind_ro "$STOCK_ROOT/odm" /system/aera-audio-odm
+bind_ro /vendor/aera-audio-abi/libaudioroute.so /system/lib64/aera-audio-abi/libaudioroute.so
+
+mount_ro "/dev/block/bootdevice/by-name/dsp$SLOT" /vendor/dsp ext4
+bind_ro /vendor/dsp /dsp
+bind_ro "$STOCK_ROOT/vendor/lib/rfsa/adsp" /vendor/lib/rfsa/adsp
+mount_ro /dev/block/bootdevice/by-name/persist /mnt/aera-wlan-persist ext4
+if [ -d /mnt/aera-wlan-persist/audio ]; then
+    bind_ro /mnt/aera-wlan-persist/audio /mnt/vendor/persist/audio
+fi
+
+mkdir -p /data/vendor/audio/acdbdata/delta /data/vendor/audio_dsp || fail 'Cannot create audio state directories.'
+chmod 0770 /data/vendor/audio /data/vendor/audio/acdbdata \
+    /data/vendor/audio/acdbdata/delta /data/vendor/audio_dsp || fail 'Cannot protect audio state directories.'
+chown audio:audio /data/vendor/audio || fail 'Cannot assign audio state ownership.'
+chown media:audio /data/vendor/audio/acdbdata /data/vendor/audio/acdbdata/delta || fail 'Cannot assign calibration state ownership.'
+chown media:media /data/vendor/audio_dsp || fail 'Cannot assign AudioPD state ownership.'
+
+[ -s /vendor/etc/aera/houji-audio.binds ] && [ -r /vendor/etc/aera/houji-audio.binds ] || fail 'Audio bind manifest is unavailable.'
+bind_list /vendor/etc/aera/houji-audio.binds
+backend=$STOCK_ROOT/odm/etc/backend_conf.xml
+backend_valid "$backend" || backend=/vendor/etc/aera/backend_conf.xml
+backend_valid "$backend" || fail 'No verified backend_conf.xml provider.'
+for target in /vendor/etc/backend_conf.xml /vendor/odm/etc/backend_conf.xml; do
+    [ -f "$target" ] && [ ! -L "$target" ] || fail 'Backend consumer is not a regular packaged file.'
+    bind_ro "$backend" "$target"
+    [ "$(stat -c '%d:%i' "$backend")" = "$(stat -c '%d:%i' "$target")" ] &&
+        backend_valid "$target" || fail 'Backend consumer differs from verified provider.'
+    target=$(readlink -f "$target") || fail 'Cannot resolve backend consumer.'
+    awk -v t="$target" '$2 == t && $4 ~ /(^|,)ro(,|$)/ {ok=1}
+        END {exit !ok}' /proc/mounts || fail 'Backend consumer is not read-only.'
+done
+
+start_optional aera-dspservice
+start_optional aera-audioadsprpcd
+# AudioPD may supply the APM endpoint needed for the machine card to bind.
+for attempt in $(seq 1 50); do
+    [ -c /dev/snd/controlC0 ] && break
+    require_ready
+    require_hardware
+    sleep 0.1
+done
+[ -c /dev/snd/controlC0 ] || fail 'The Qualcomm machine sound card is unavailable.'
+start_optional aera-agm-service
+for attempt in $(seq 1 100); do
+    [ "$(getprop init.svc.aera-agm-service)" = running ] || fail 'Stock HAL host exited.'
+    [ "$(getprop vendor.houji.audio.hal.ready)" = 1 ] && break
+    require_ready
+    require_hardware
+    sleep 0.1
+done
+[ "$(getprop vendor.houji.audio.hal.ready)" = 1 ] || fail 'HAL initialization did not become ready.'
+require_ready
+require_hardware
+[ "$(getprop init.svc.aera-agm-service)" = running ] || fail 'Stock HAL host exited.'
+setprop "$READY" 1 || fail 'Cannot publish audio readiness.'
+SUCCESS=1
+log 'Stock primary HAL and protected audio backend are ready.'

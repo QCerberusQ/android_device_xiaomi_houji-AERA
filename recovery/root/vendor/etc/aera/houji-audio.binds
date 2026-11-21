@@ -1,7 +1,5 @@
 # source-partition source-relative-path recovery-target
-# backend_conf.xml is mandatory and selected/validated by aera_audio_bootstrap.sh.
-vendor lib64/hw/android.hardware.audio@7.1-impl.so /vendor/lib64/hw/android.hardware.audio@7.1-impl.so
-vendor lib64/hw/android.hardware.audio.effect@7.0-impl.so /vendor/lib64/hw/android.hardware.audio.effect@7.0-impl.so
+# Validated backend_conf.xml is exposed read-only by aera-audio-bootstrap.
 vendor lib64/hw/audio.primary.pineapple.so /vendor/lib64/hw/audio.primary.pineapple.so
 vendor lib64/hw/audio.r_submix.default.so /vendor/lib64/hw/audio.r_submix.default.so
 vendor lib64/hw/audio.usb.default.so /vendor/lib64/hw/audio.usb.default.so
@@ -19,6 +17,9 @@ vendor lib64/libkaraokepal.so /vendor/lib64/libkaraokepal.so
 vendor lib64/libqtigefar.so /vendor/lib64/libqtigefar.so
 vendor lib64/hw/gyro_fusion_interface.so /vendor/lib64/gyro_fusion_interface.so
 odm lib64/libcrussp.so /vendor/odm/lib64/libcrussp.so
+odm lib64/libvoipspacespeech.so /vendor/lib64/libvoipspacespeech.so
+odm lib64/libaudioroute_ext.so /vendor/lib64/libaudioroute_ext.so
+odm lib64/vendor.xiaomi.hardware.mediaeventgatherservice-V1-ndk.so /vendor/lib64/vendor.xiaomi.hardware.mediaeventgatherservice-V1-ndk.so
 odm firmware /odm/firmware
 odm etc/audio/sku_pineapple/mixer_paths_pineapple_mtp.xml /vendor/etc/mixer_paths_pineapple_mtp.xml
 odm etc/audio/sku_pineapple/mixer_paths_overlay_static.xml /vendor/etc/mixer_paths_overlay_static.xml

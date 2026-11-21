@@ -23,23 +23,19 @@ case "$qsee_pid" in
         ;;
 esac
 
-source=/vendor/aera-audio-abi/libaudiofeaturestats.so
-target=/vendor/lib64/libaudiofeaturestats.so
-source_id=$(stat -c '%d:%i' "$source" 2>/dev/null)
-target_id=$(stat -c '%d:%i' "$target" 2>/dev/null)
-if [ -s "$source" ] && [ -n "$source_id" ] && [ "$source_id" = "$target_id" ]; then
-    printf 'PASS: bundled audio statistics library is bound at %s.\n' "$target"
-else
-    bad 'Bundled audio statistics library is missing or not bound.'
+audio_pid=$(getprop init.svc_debug_pid.aera-agm-service)
+if [ "$(getprop init.svc.aera-agm-service)" != running ] ||
+   [ "$(getprop vendor.houji.audio.hal.ready)" != 1 ] ||
+   [ "$(getprop vendor.houji.audio.ready)" != 1 ]; then
+    bad 'Lightweight audio host/bootstrap is not ready; request playback first.'
 fi
-audio_pid=$(getprop init.svc_debug_pid.aera-stock-audio-hal)
 case "$audio_pid" in
-    ''|0|*[!0-9]*) bad 'Audio HAL PID is unavailable.' ;;
+    ''|0|*[!0-9]*) bad 'Lightweight audio host PID is unavailable.' ;;
     *)
-        if grep -F 'libaudiofeaturestats.so' /proc/$audio_pid/maps; then
-            printf 'PASS: audio HAL PID %s currently maps the statistics library.\n' "$audio_pid"
+        if grep -F 'audio.primary.pineapple.so' /proc/$audio_pid/maps; then
+            printf 'PASS: audio host PID %s maps the stock primary HAL.\n' "$audio_pid"
         else
-            bad 'Statistics library is not observed in audio HAL maps; play audio and rerun.'
+            bad 'Stock primary HAL is not observed in the audio host maps.'
         fi
         ;;
 esac

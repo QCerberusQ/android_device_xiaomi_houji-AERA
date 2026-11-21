@@ -22,10 +22,10 @@ $(call inherit-product, vendor/twrp/config/common.mk)
 # Device-specific Aera configuration
 $(call inherit-product-if-exists, $(DEVICE_PATH)/aera_houji.mk)
 
-# Device-side PCM bridge and primary HAL opener; the ROM supplies the audio HAL.
+# Protected PCM playback uses the lightweight stock primary HAL host.
 PRODUCT_PACKAGES += \
     aera-audio-bridge \
-    aera-audio-primary-opener \
+    aera-agm-service \
     aera-houji-pd-mapper
 
 # AERA's native UI provider owns QMI data sessions and their storage leases.

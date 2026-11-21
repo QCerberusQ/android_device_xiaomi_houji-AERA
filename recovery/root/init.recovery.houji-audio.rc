@@ -1,28 +1,10 @@
-# Optional audio waits for primary userdata and the native network pass.
-on property:twrp.decrypt.done=true && property:post.decrypt.modules=true && property:crypto.ready=1 && property:vendor.sys.listeners.registered=true && property:vendor.houji.adsp.ready=1
-    write /dev/kmsg "[aera-audio] primary userdata unlocked; scheduling delayed audio"
-    start aera-houji-audio-bootstrap
-
-on property:post.decrypt.modules=true && property:crypto.ready=1 && property:vendor.sys.listeners.registered=true && property:vendor.houji.adsp.ready=1
-    write /dev/kmsg "[aera-audio] native networking ready; checking userdata before delayed audio"
-    start aera-houji-audio-bootstrap
-
+# Shared mapper services retain the established ADSP/charging sequence.
 service aera-pdmapper-boot /system/bin/sh /system/bin/aera-houji-adsp.sh
     class core
     disabled
     oneshot
     user root
     group root system
-    seclabel u:r:recovery:s0
-    stdio_to_kmsg
-
-service aera-houji-audio-bootstrap /system/bin/sh /system/bin/aera_audio_bootstrap.sh --late
-    class hal
-    disabled
-    oneshot
-    timeout_period 120
-    user root
-    group root audio system media
     seclabel u:r:recovery:s0
     stdio_to_kmsg
 
@@ -35,52 +17,87 @@ service aera-houji-pd-mapper /system/bin/aera-houji-pd-mapper
     seclabel u:r:recovery:s0
     stdio_to_kmsg
 
-service aera-dspservice /vendor/bin/aera-dspservice
+# Optional playback waits for native completion and the established secure/ADSP stack.
+on property:post.decrypt.modules=true && property:crypto.ready=1 && property:vendor.sys.listeners.registered=true && property:vendor.houji.adsp.ready=1
+    start aera-audio-bootstrap
+
+service aera-audio-bootstrap /system/bin/sh /system/bin/aera-audio-bootstrap
     class hal
     disabled
+    oneshot
+    timeout_period 45
+    user root
+    group root system audio media wakelock
+    seclabel u:r:recovery:s0
+    stdio_to_kmsg
+
+service aera-dspservice /system/bin/linker64 /system/aera-audio-vendor/bin/dspservice
+    class hal
+    disabled
+    oneshot
     user system
     group system wakelock 2908
     capabilities BLOCK_SUSPEND
-    setenv LD_LIBRARY_PATH /vendor/aera-audio-abi:/vendor/aera-stock-lib64:/vendor/aera-stock-odm-lib64:/vendor/aera-stock-system-lib64:/vendor/lib64:/system/lib64
-    interface vendor.qti.hardware.dsp@1.0::IDspService dspservice
+    setenv LD_LIBRARY_PATH /system/lib64/aera-audio-abi:/system/aera-audio-system-lib64:/system/aera-audio-vendor/lib64:/system/aera-audio-odm/lib64:/system/lib64
     seclabel u:r:recovery:s0
     stdio_to_kmsg
 
-service aera-audioadsprpcd /vendor/bin/aera-audioadsprpcd audiopd
+service aera-audioadsprpcd /system/bin/linker64 /system/aera-audio-vendor/bin/audioadsprpcd audiopd
     class main
     disabled
+    oneshot
     user media
     group media
-    setenv LD_LIBRARY_PATH /vendor/aera-audio-abi:/vendor/aera-stock-lib64:/vendor/aera-stock-odm-lib64:/vendor/aera-stock-system-lib64:/vendor/lib64:/system/lib64
+    setenv LD_LIBRARY_PATH /system/lib64/aera-audio-abi:/system/aera-audio-system-lib64:/system/aera-audio-vendor/lib64:/system/aera-audio-odm/lib64:/system/lib64
     seclabel u:r:recovery:s0
     stdio_to_kmsg
 
-# The bootstrap starts this service only after the ALSA machine card exists.
-service aera-stock-audio-hal /vendor/bin/hw/android.hardware.audio.service
+service aera-agm-service /system/bin/aera-agm-service --houji-stock-audio
     class hal
     disabled
     oneshot
     user root
-    group root audio system media
-    capabilities BLOCK_SUSPEND SYS_NICE
-    setenv LD_LIBRARY_PATH /vendor/aera-audio-abi:/vendor/aera-stock-lib64:/vendor/aera-stock-odm-lib64:/vendor/aera-stock-system-lib64:/vendor/lib64:/system/lib64
+    group root system audio media wakelock
+    setenv LD_LIBRARY_PATH /system/lib64/aera-audio-abi:/system/aera-audio-system-lib64:/system/aera-audio-vendor/lib64:/system/aera-audio-odm/lib64:/system/lib64
     setenv ANDROID_ROOT /system
     setenv ANDROID_DATA /data
-    socket audio_holder_socket_0 seqpacket 0666 system system
-    socket audio_us_socket_0 seqpacket 0666 system system
-    interface android.hardware.audio@7.0::IDevicesFactory default
-    interface android.hardware.audio@7.1::IDevicesFactory default
-    interface android.hardware.audio.effect@7.0::IEffectsFactory default
-    interface vendor.qti.hardware.AGMIPC@1.0::IAGM default
-    interface vendor.qti.hardware.pal@1.0::IPAL default
     seclabel u:r:recovery:s0
     stdio_to_kmsg
 
-service aera-audio-primary-opener /system/bin/aera-audio-primary-opener
-    class hal
-    disabled
-    oneshot
-    user root
-    group root audio
-    seclabel u:r:recovery:s0
-    stdio_to_kmsg
+# A queued property event can carry an old value. Named events recheck state.
+on property:init.svc.aera-audio-bootstrap=stopped && property:vendor.houji.audio.ready=0
+    trigger aera-audio-reconcile
+
+on property:init.svc.aera-agm-service=stopped && property:vendor.houji.audio.ready=1
+    trigger aera-audio-reconcile
+
+# A queued ctl.start can complete after its bootstrap sender is killed.
+on property:init.svc.aera-agm-service=running && property:init.svc.aera-audio-bootstrap=stopped && property:vendor.houji.audio.ready=0
+    trigger aera-audio-reconcile
+
+on property:init.svc.aera-audioadsprpcd=running && property:init.svc.aera-audio-bootstrap=stopped && property:vendor.houji.audio.ready=0
+    trigger aera-audio-reconcile
+
+on property:init.svc.aera-dspservice=running && property:init.svc.aera-audio-bootstrap=stopped && property:vendor.houji.audio.ready=0
+    trigger aera-audio-reconcile
+
+on aera-audio-reconcile && property:init.svc.aera-agm-service=stopped && property:vendor.houji.audio.ready=1
+    setprop vendor.houji.audio.hal.ready 0
+    setprop vendor.houji.audio.ready 0
+
+# Init runs this even when SIGKILL prevents the bootstrap's EXIT trap.
+on aera-audio-reconcile && property:init.svc.aera-audio-bootstrap=stopped && property:vendor.houji.audio.ready=0
+    setprop vendor.houji.audio.hal.ready 0
+
+on aera-audio-reconcile && property:init.svc.aera-audio-bootstrap=stopped && property:vendor.houji.audio.ready=0 && property:init.svc.aera-agm-service=running
+    stop aera-agm-service
+
+on aera-audio-reconcile && property:init.svc.aera-audio-bootstrap=stopped && property:vendor.houji.audio.ready=0 && property:init.svc.aera-audioadsprpcd=running
+    stop aera-audioadsprpcd
+
+on aera-audio-reconcile && property:init.svc.aera-audio-bootstrap=stopped && property:vendor.houji.audio.ready=0 && property:init.svc.aera-dspservice=running
+    stop aera-dspservice
+
+on init
+    setprop vendor.houji.audio.hal.ready 0
+    setprop vendor.houji.audio.ready 0

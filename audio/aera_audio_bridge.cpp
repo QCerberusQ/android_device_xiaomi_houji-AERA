@@ -18,6 +18,7 @@
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/system_properties.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/wait.h>
@@ -25,6 +26,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <string>
 
@@ -37,7 +39,6 @@ constexpr uint32_t kChannels = 2U;
 constexpr uint32_t kBits = 16U;
 constexpr int kDefaultVolumePercent = 30;
 constexpr char kSocketName[] = "aera-browser-audio-v1";
-constexpr char kBootstrap[] = "/system/bin/aera_audio_bootstrap.sh";
 constexpr char kSelf[] = "/proc/self/exe";
 volatile sig_atomic_t g_stop = 0;
 
@@ -220,18 +221,41 @@ int ReadVolumePercent() {
   return std::clamp(atoi(value), 0, 100);
 }
 
+bool PropertyEquals(const char* name, const char* expected) {
+  char value[PROP_VALUE_MAX]{};
+  __system_property_get(name, value);
+  return strcmp(value, expected) == 0;
+}
+
+bool IsFastbootd() {
+  return PropertyEquals("ro.aera.fastbootd", "1") ||
+         PropertyEquals("ro.aera.fastbootd", "true") ||
+         PropertyEquals("sys.usb.config.aera_fastbootd", "1") ||
+         PropertyEquals("sys.usb.config.aera_fastbootd", "true");
+}
+
 bool StartBackend() {
-  const pid_t child = fork();
-  if (child < 0) return false;
-  if (!child) {
-    execl("/system/bin/sh", "sh", kBootstrap, nullptr);
-    _exit(127);
+  if (IsFastbootd()) return false;
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(50);
+  if (__system_property_set("ctl.start", "aera-audio-bootstrap") != 0)
+    return false;
+  bool bootstrap_seen = false;
+  while (!g_stop && std::chrono::steady_clock::now() < deadline) {
+    if (IsFastbootd()) return false;
+    if (PropertyEquals("vendor.houji.audio.ready", "1") &&
+        PropertyEquals("vendor.houji.audio.hal.ready", "1") &&
+        PropertyEquals("init.svc.aera-agm-service", "running"))
+      return true;
+    if (PropertyEquals("init.svc.aera-audio-bootstrap", "running") ||
+        PropertyEquals("init.svc.aera-audio-bootstrap", "restarting"))
+      bootstrap_seen = true;
+    else if (bootstrap_seen &&
+             PropertyEquals("init.svc.aera-audio-bootstrap", "stopped"))
+      return false;
+    usleep(100000);
   }
-  int status = 0;
-  while (waitpid(child, &status, 0) < 0) {
-    if (errno != EINTR) return false;
-  }
-  return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+  return false;
 }
 
 pid_t StartPlayer(const std::string& fifo) {
@@ -239,8 +263,9 @@ pid_t StartPlayer(const std::string& fifo) {
   if (child != 0) return child;
   prctl(PR_SET_PDEATHSIG, SIGTERM, 0, 0, 0);
   setenv("LD_LIBRARY_PATH",
-         "/vendor/aera-audio-abi:/vendor/aera-stock-lib64:/vendor/aera-stock-odm-lib64:"
-         "/vendor/aera-stock-system-lib64:/vendor/lib64:/system/lib64", 1);
+         "/system/lib64/aera-audio-abi:/system/aera-audio-system-lib64:"
+         "/system/aera-audio-vendor/lib64:/system/aera-audio-odm/lib64:"
+         "/system/lib64", 1);
   setenv("ANDROID_ROOT", "/system", 1);
   setenv("ANDROID_DATA", "/data", 1);
   execl(kSelf, "aera-audio-bridge", "--play-fifo", fifo.c_str(), nullptr);
