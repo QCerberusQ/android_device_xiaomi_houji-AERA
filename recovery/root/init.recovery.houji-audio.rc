@@ -58,7 +58,7 @@ service aera-agm-service /system/bin/aera-agm-service --houji-stock-audio
     oneshot
     user root
     group root system audio media wakelock
-    setenv LD_LIBRARY_PATH /system/lib64/aera-audio-abi:/system/aera-audio-system-lib64:/system/aera-audio-vendor/lib64:/system/aera-audio-odm/lib64:/system/lib64
+    setenv LD_LIBRARY_PATH /system/lib64/aera-audio-abi:/system/aera-audio-system-lib64:/system/aera-audio-vendor/lib64:/system/aera-audio-vendor/lib64/hw:/system/aera-audio-odm/lib64:/system/lib64
     setenv ANDROID_ROOT /system
     setenv ANDROID_DATA /data
     seclabel u:r:recovery:s0
