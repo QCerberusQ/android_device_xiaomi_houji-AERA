@@ -234,6 +234,13 @@ bool IsFastbootd() {
          PropertyEquals("sys.usb.config.aera_fastbootd", "true");
 }
 
+bool BackendReady() {
+  return !IsFastbootd() &&
+         PropertyEquals("vendor.houji.audio.ready", "1") &&
+         PropertyEquals("vendor.houji.audio.hal.ready", "1") &&
+         PropertyEquals("init.svc.aera-agm-service", "running");
+}
+
 bool StartBackend() {
   if (IsFastbootd()) return false;
   const auto deadline =
@@ -529,7 +536,8 @@ int main(int argc, char** argv) {
       if (errno == EINTR) continue;
       break;
     }
-    ServeClient(client, backend_available);
+    // Readiness can arrive after the first bootstrap attempt fails early.
+    ServeClient(client, BackendReady());
     close(client);
   }
   close(server);

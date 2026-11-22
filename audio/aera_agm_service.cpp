@@ -72,7 +72,8 @@ int main(int argc, char** argv) {
   if (status != 0 || !raw_device) {
     __android_log_print(ANDROID_LOG_ERROR, kTag,
                         "Primary audio HAL initialization failed: %d", status);
-    return 69;
+    // Skip partly initialized HAL destructors while its threads still run.
+    _exit(69);
   }
   if (__system_property_set(kReadyProperty, "1") != 0) {
     __system_property_set(kReadyProperty, "0");
