@@ -22,10 +22,9 @@ $(call inherit-product, vendor/twrp/config/common.mk)
 # Device-specific Aera configuration
 $(call inherit-product-if-exists, $(DEVICE_PATH)/aera_houji.mk)
 
-# Protected PCM playback uses the lightweight stock primary HAL host.
+# Playback audio is disabled; media uses the core silent PCM bridge.
 PRODUCT_PACKAGES += \
-    aera-audio-bridge \
-    aera-agm-service \
+    aera-audio-null-bridge \
     aera-houji-pd-mapper
 
 # AERA's native UI provider owns QMI data sessions and their storage leases.
