@@ -79,6 +79,34 @@ start_optional() {
     [ "$(getprop "init.svc.$service")" = running ] || fail "Service $service exited."
 }
 
+# Recovery's ro.product.board=houji makes AGM open ODM acdbdata/Tutu, then the
+# card SoC directory. Custom ROMs keep that calibration in the card-variant
+# directory AGM selects for their own board, so expose it read-only as Tutu.
+expose_calibration() {
+    local root card soc variant source suffix alias
+    root=$STOCK_ROOT/odm/etc/acdbdata
+    card=$(awk 'found {print $1; exit} $1 == "0" && $2 ~ /^\[/ {found = 1}' /proc/asound/cards 2>/dev/null)
+    soc=${card%%-*}
+    variant=$(printf '%s\n' "$card" | awk -F- '{s = $1; for (i = 2; i <= NF && $i !~ /^snd/; i++) s = s "_" $i; print s}')
+    suffix=
+    if [ -d "$root/Tutu" ]; then
+        source=$root/Tutu
+    elif [ -n "$soc" ] && [ -d "$root/$soc" ]; then
+        source=$root/$soc
+    elif [ -n "$variant" ] && [ -d "$root/$variant" ]; then
+        source=$root/$variant
+        suffix=/Tutu
+    else
+        fail 'Active ODM has no AGM calibration directory.'
+    fi
+    set -- "$source"/*.acdb
+    [ -f "$1" ] || fail "Active ODM calibration has no .acdb file: $source"
+    [ -n "$suffix" ] || source=$root
+    for alias in /odm/etc/acdbdata /vendor/odm/etc/acdbdata; do
+        bind_ro "$source" "$alias$suffix"
+    done
+}
+
 require_ready
 require_hardware
 SLOT=$(getprop ro.boot.slot_suffix)
@@ -151,6 +179,7 @@ for attempt in $(seq 1 50); do
     sleep 0.1
 done
 [ -c /dev/snd/controlC0 ] || fail 'The Qualcomm machine sound card is unavailable.'
+expose_calibration
 start_optional aera-agm-service
 for attempt in $(seq 1 100); do
     [ "$(getprop init.svc.aera-agm-service)" = running ] || fail 'Stock HAL host exited.'

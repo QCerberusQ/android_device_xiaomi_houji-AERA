@@ -1,5 +1,6 @@
 # source-partition source-relative-path recovery-target
 # Validated backend_conf.xml is exposed read-only by aera-audio-bootstrap.
+# ODM acdbdata is exposed by aera-audio-bootstrap for AGM's Tutu lookup.
 vendor lib64/hw/audio.primary.pineapple.so /vendor/lib64/hw/audio.primary.pineapple.so
 vendor lib64/hw/audio.r_submix.default.so /vendor/lib64/hw/audio.r_submix.default.so
 vendor lib64/hw/audio.usb.default.so /vendor/lib64/hw/audio.usb.default.so
@@ -30,8 +31,6 @@ vendor etc/audio /vendor/etc/audio
 vendor etc/acdbdata /vendor/etc/acdbdata
 odm etc/audio /odm/etc/audio
 odm etc/audio /vendor/odm/etc/audio
-odm etc/acdbdata /odm/etc/acdbdata
-odm etc/acdbdata /vendor/odm/etc/acdbdata
 odm etc/usecaseKvManager.xml /odm/etc/usecaseKvManager.xml
 vendor etc/card-defs.xml /vendor/etc/card-defs.xml
 vendor etc/kvh2xml.xml /vendor/etc/kvh2xml.xml
